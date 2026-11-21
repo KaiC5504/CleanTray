@@ -120,7 +120,7 @@ public partial class PanelWindow : Window
         Empty.Visibility = Items.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    static void Update(Button b, TrayIconInfo icon)
+    void Update(Button b, TrayIconInfo icon)
     {
         var old = (TrayIconInfo)b.Tag;
         b.Tag = icon;
@@ -129,12 +129,23 @@ public partial class PanelWindow : Window
             b.Content = MakeContent(icon);
     }
 
-    static void SetText(Button b, TrayIconInfo icon)
+    void SetText(Button b, TrayIconInfo icon)
     {
         var name = DisplayName(icon);
-        b.ToolTip = string.IsNullOrEmpty(icon.Tip) ? name : icon.Tip;
+        if (b.ToolTip is not ToolTip label) b.ToolTip = label = MakeLabel();
+        label.Content = string.IsNullOrEmpty(icon.Tip) ? name : icon.Tip;
         AutomationProperties.SetName(b, name);
     }
+
+    // The brushes are set here rather than looked up by the template: a tooltip's popup is not
+    // in this window's tree, and the panel's theme is fixed once the window exists.
+    ToolTip MakeLabel() => new()
+    {
+        Style = (Style)FindResource("HoverLabel"),
+        Foreground = (Brush)FindResource("PanelText"),
+        Background = (Brush)FindResource("PanelBackground"),
+        BorderBrush = (Brush)FindResource("LabelBorder"),
+    };
 
     static object MakeContent(TrayIconInfo icon)
     {
@@ -445,5 +456,6 @@ public partial class PanelWindow : Window
         Resources["PanelText"] = new SolidColorBrush(Colors.White);
         Resources["ItemHover"] = new SolidColorBrush(Color.FromArgb(0x14, 0xFF, 0xFF, 0xFF));
         Resources["ItemPressed"] = new SolidColorBrush(Color.FromArgb(0x0A, 0xFF, 0xFF, 0xFF));
+        Resources["LabelBorder"] = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF));
     }
 }

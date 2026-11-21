@@ -18,6 +18,33 @@
         <SolidColorBrush x:Key="PanelText" Color="#1B1B1B" />
         <SolidColorBrush x:Key="ItemHover" Color="#0F000000" />
         <SolidColorBrush x:Key="ItemPressed" Color="#1A000000" />
+        <SolidColorBrush x:Key="LabelBorder" Color="#1F000000" />
+
+        <!-- The popup of a tooltip is transparent, so the margin is room for the shadow. -->
+        <Style x:Key="HoverLabel" TargetType="ToolTip">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="UseLayoutRounding" Value="True" />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" MaxWidth="320" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Margin="8" Padding="9,5,9,6" CornerRadius="6" BorderThickness="1"
+                                Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Direction="270" Opacity="0.28" />
+                            </Border.Effect>
+                            <ContentPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style x:Key="IconButton" TargetType="Button">
             <Setter Property="Width" Value="32" />
