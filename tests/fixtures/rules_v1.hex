@@ -1,0 +1,14 @@
+# Rules table v1: flags=0, two entries (sorted ordinal)
+43 54 52 4c          # magic "CTRL"
+01 00 00 00          # version
+00 00 00 00          # seq (even = stable)
+00 00 00 00          # flags (CaptureNewByDefault off)
+02 00 00 00          # count
+3c 00 00 00          # payloadBytes = 24 + 36
+# entry: "c:\a\b.exe" Captured, popups 0
+0a 00 01 00
+63 00 3a 00 5c 00 61 00 5c 00 62 00 2e 00 65 00 78 00 65 00
+# entry: "c:\a\b.exe#uid:7" Show, popups 1
+10 00 00 01
+63 00 3a 00 5c 00 61 00 5c 00 62 00 2e 00 65 00 78 00 65 00
+23 00 75 00 69 00 64 00 3a 00 37 00

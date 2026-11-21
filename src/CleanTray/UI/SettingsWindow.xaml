@@ -1,0 +1,138 @@
+<Window x:Class="CleanTray.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:CleanTray.UI"
+        Title="CleanTray Settings"
+        ThemeMode="System"
+        Width="760" Height="620"
+        MinWidth="600" MinHeight="400"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisible" />
+        <Style x:Key="Secondary" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <DataTemplate x:Key="IconRowTemplate" DataType="{x:Type ui:IconRow}">
+            <Grid Margin="56,2,0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="170" />
+                    <ColumnDefinition Width="190" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Tip}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Style="{StaticResource Secondary}" />
+                <ui:ModeComboBox Grid.Column="1" Width="150" HorizontalAlignment="Left"
+                                 ItemsSource="{x:Static ui:IconRow.ModeChoices}"
+                                 SelectedIndex="{Binding ModeIndex, Mode=TwoWay}"
+                                 AutomationProperties.Name="{Binding ModeAutomationName}" />
+                <CheckBox Grid.Column="2" IsThreeState="True" Content="{Binding PopupsLabel}"
+                          IsChecked="{Binding Popups, Mode=TwoWay}"
+                          AutomationProperties.Name="{Binding PopupsAutomationName}" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="AppRowTemplate" DataType="{x:Type ui:AppRow}">
+            <StackPanel Margin="0,0,0,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="170" />
+                        <ColumnDefinition Width="100" />
+                    </Grid.ColumnDefinitions>
+                    <ToggleButton Grid.Column="0" Width="24" Height="24" Padding="0" Background="Transparent"
+                                  BorderThickness="0" VerticalAlignment="Center"
+                                  IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                  Visibility="{Binding HasSubRows, Converter={StaticResource BoolToVisible}}"
+                                  AutomationProperties.Name="Show icons">
+                        <TextBlock Text="&#x203A;" FontSize="16" RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                            <Setter Property="RenderTransform">
+                                                <Setter.Value>
+                                                    <RotateTransform Angle="90" />
+                                                </Setter.Value>
+                                            </Setter>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </ToggleButton>
+                    <Image Grid.Column="1" Width="20" Height="20" Source="{Binding Icon}" VerticalAlignment="Center"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Path}" FontSize="11" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Path}" Style="{StaticResource Secondary}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="3" Text="{Binding LastSeen}" VerticalAlignment="Center"
+                               FontSize="12" Style="{StaticResource Secondary}" />
+                    <ui:ModeComboBox Grid.Column="4" Width="150" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                     ItemsSource="{x:Static ui:AppRow.ModeChoices}"
+                                     SelectedIndex="{Binding ModeIndex, Mode=TwoWay}"
+                                     AutomationProperties.Name="{Binding ModeAutomationName}" />
+                    <CheckBox Grid.Column="5" Content="Pop-ups" VerticalAlignment="Center"
+                              IsChecked="{Binding Popups, Mode=TwoWay}"
+                              AutomationProperties.Name="{Binding PopupsAutomationName}" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Icons}" ItemTemplate="{StaticResource IconRowTemplate}"
+                              Margin="0,4,0,0"
+                              Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisible}}" />
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="24,20,24,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="Banner" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Foreground="#C42B1C" />
+
+        <StackPanel Grid.Row="1">
+            <TextBlock Text="General" Style="{StaticResource Heading}" Margin="0,0,0,8" />
+            <CheckBox x:Name="ShowIcon" Content="Show the CleanTray icon" Checked="OnShowIconChanged" Unchecked="OnShowIconChanged" />
+            <TextBlock x:Name="ShowIconHint" Margin="28,0,0,4" Visibility="Collapsed" Style="{StaticResource Secondary}"
+                       Text="Press the shortcut or start CleanTray again to open it." />
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+                <TextBlock Text="Shortcut" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <TextBox x:Name="HotkeyBox" Width="170" AutomationProperties.Name="Shortcut"
+                         TextChanged="OnHotkeyTextChanged" LostFocus="OnHotkeyCommit" KeyDown="OnHotkeyKeyDown" />
+                <TextBlock x:Name="HotkeyStatus" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="#C42B1C" />
+            </StackPanel>
+            <CheckBox x:Name="Autostart" Content="Start with Windows" Checked="OnAutostartChanged" Unchecked="OnAutostartChanged" />
+            <CheckBox x:Name="HideNew" Content="Hide new apps automatically" Margin="0,6,0,0"
+                      Checked="OnHideNewChecked" Unchecked="OnHideNewUnchecked" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Margin="0,24,0,8">
+            <TextBlock Text="Apps" Style="{StaticResource Heading}" />
+            <TextBlock Text="Choose which apps keep their icon in the taskbar and which sit inside CleanTray."
+                       Style="{StaticResource Secondary}" Margin="0,2,0,0" />
+        </StackPanel>
+
+        <Grid Grid.Row="3">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="Apps" ItemTemplate="{StaticResource AppRowTemplate}" Margin="0,0,8,0" />
+            </ScrollViewer>
+            <TextBlock x:Name="EmptyText" Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,8,0,0"
+                       Text="No apps yet. They appear here the first time they add a tray icon." />
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>CleanTray</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\CleanTray.ico</ApplicationIcon>
+    <HookDll>$(MSBuildThisFileDirectory)..\..\build\src\CleanTrayHook\Release\CleanTrayHook.dll</HookDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CleanTray.Core\CleanTray.Core.csproj" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <Using Include="System.IO" />
+    <EmbeddedResource Include="Assets\CleanTray.ico" LogicalName="CleanTray.ico" />
+    <None Include="$(HookDll)" Link="CleanTrayHook.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <Target Name="RequireHookDll" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(HookDll)')"
+           Text="CleanTrayHook.dll is missing at $(HookDll). Build the hook first: run ./build.ps1, or cmake -S . -B build -A x64 followed by cmake --build build --config Release --target CleanTrayHook." />
+  </Target>
+
+</Project>

@@ -1,0 +1,7 @@
+# Click command frame (type 102)
+11 00 00 00          # payloadLength = 17
+66 00                # type 102
+2a 00 00 00 00 00 00 00   # iconId 42
+03                   # kind Right
+64 00 00 00          # x 100
+c8 00 00 00          # y 200

@@ -1,0 +1,28 @@
+<Window x:Class="CleanTray.UI.CaptureWarningDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CleanTray"
+        ThemeMode="System"
+        SizeToContent="Height"
+        Width="460"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        UseLayoutRounding="True"
+        FocusManager.FocusedElement="{Binding ElementName=CancelButton}">
+    <Grid Margin="24,20,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock Text="Hide new apps automatically?" FontSize="18" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="1" Margin="0,12,0,0" TextWrapping="Wrap"
+                   Text="Any app that adds a tray icon from now on will be hidden inside CleanTray without asking, including apps you don't recognise. Something unwanted or harmful could run without you noticing its icon. You can always see every app in this Settings list." />
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button x:Name="ConfirmButton" Content="Hide new apps automatically" Padding="14,6" Click="OnConfirm" />
+            <Button x:Name="CancelButton" Content="Cancel" Padding="18,6" Margin="8,0,0,0"
+                    IsDefault="True" IsCancel="True" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,18 @@
+# IconUpsert frame (type 2)
+6e 00 00 00          # payloadLength = 110
+02 00                # type
+2a 00 00 00 00 00 00 00   # iconId 42
+e8 03 00 00          # pid 1000
+34 12 00 00          # hwnd 0x1234
+07 00 00 00          # uid 7
+00                   # hasGuid
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   # guid
+01 80 00 00          # callbackMsg 0x8001
+04 00 00 00          # version 4
+00 00 00 00          # state
+01                   # captured
+0a 00 63 00 3a 00 5c 00 61 00 5c 00 62 00 2e 00 65 00 78 00 65 00   # appKey "c:\a\b.exe"
+0a 00 43 00 3a 00 5c 00 41 00 5c 00 62 00 2e 00 65 00 78 00 65 00   # exePath "C:\A\b.exe"
+03 00 54 00 69 00 70 00   # tip "Tip"
+01 00 01 00          # w=1 h=1
+01 02 03 04          # bgra

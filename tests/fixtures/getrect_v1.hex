@@ -1,0 +1,9 @@
+# Shell_NotifyIconGetRect WM_COPYDATA (dwData 3), size request for a GUID icon
+23 34 75 34          # signature 0x34753423
+02 00 00 00          # dwMessage 2 = size
+20 00 00 00          # cbSize 32
+00 00 00 00          # unknown, always 0
+06 08 0f 00          # hWnd 0xF0806
+01 00 00 00          # uID 1
+# guidItem {3b3905d1-afd0-ca7e-3ca2-c9da5791fd04}, little-endian layout
+d1 05 39 3b d0 af 7e ca 3c a2 c9 da 57 91 fd 04

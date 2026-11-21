@@ -1,0 +1,7 @@
+LIBRARY CleanTrayHook
+EXPORTS
+    CleanTrayGetMsgProc
+    CleanTrayNormalizeAppKey
+    CleanTrayTestActivate
+    CleanTrayTestInjectFault
+    CleanTrayTestSetFaultBroadcast

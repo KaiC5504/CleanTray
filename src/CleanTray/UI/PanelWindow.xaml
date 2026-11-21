@@ -1,0 +1,55 @@
+<Window x:Class="CleanTray.UI.PanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CleanTray"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual"
+        Left="-32000"
+        Top="-32000"
+        UseLayoutRounding="True"
+        Background="{DynamicResource PanelBackground}">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PanelBackground" Color="#EEEEEE" />
+        <SolidColorBrush x:Key="PanelText" Color="#1B1B1B" />
+        <SolidColorBrush x:Key="ItemHover" Color="#0F000000" />
+        <SolidColorBrush x:Key="ItemPressed" Color="#1A000000" />
+
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="Foreground" Value="{DynamicResource PanelText}" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="Transparent" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ItemHover}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ItemPressed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- DWM draws the rounded border and the shadow. -->
+    <Grid Margin="6">
+        <WrapPanel x:Name="Items" MaxWidth="216" />
+        <TextBlock x:Name="Empty" Text="No hidden icons" Margin="10,6"
+                   Foreground="{DynamicResource PanelText}" Visibility="Collapsed" />
+    </Grid>
+</Window>
