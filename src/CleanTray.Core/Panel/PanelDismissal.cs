@@ -9,9 +9,10 @@ public readonly record struct ForegroundInfo(uint Pid, bool IsTray, bool Visible
 /// <summary>
 /// Where a mouse button went down, by window rect: the panel, a taskbar or the overflow; one of the
 /// clicked app's tracked Win32 menus; the foreground window. They can overlap, because apps open
-/// their menu at the forwarded click point, which is on the panel.
+/// their menu at the forwarded click point, which is on the panel. <c>OnTaskbar</c> is a taskbar
+/// that is neither the panel nor the overflow, and implies <c>OnTray</c>.
 /// </summary>
-public readonly record struct ClickPoint(bool OnTray, bool OnMenu = false, bool OnForeground = false);
+public readonly record struct ClickPoint(bool OnTray, bool OnMenu = false, bool OnForeground = false, bool OnTaskbar = false);
 
 /// <summary>
 /// Decides when the panel closes. The panel never takes activation, so the Windows overflow it was
@@ -78,7 +79,10 @@ public sealed class PanelDismissal
             _lastMenuClickOutside = !insideTray;
             return false;
         }
-        return !insideTray && !IsAppPopup(fg);
+        if (!insideTray) return !IsAppPopup(fg);
+        // The overflow light-dismisses on a taskbar click anyway, but only after its close animation
+        // has played; closing now keeps the panel from lingering beside the empty spot.
+        return at.OnTaskbar && _overflowAtOpen && !IsAppPopup(fg);
     }
 
     /// <returns>True when the panel should close.</returns>

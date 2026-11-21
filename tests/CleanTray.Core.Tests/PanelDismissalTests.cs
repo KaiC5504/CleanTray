@@ -18,6 +18,7 @@ public sealed class PanelDismissalTests
 
     static readonly ClickPoint OnTray = new(OnTray: true);
     static readonly ClickPoint Elsewhere = new(OnTray: false);
+    static readonly ClickPoint OnTaskbar = new(OnTray: true, OnTaskbar: true);
 
     static PanelDismissal Open(bool overflow = false)
     {
@@ -72,6 +73,61 @@ public sealed class PanelDismissalTests
         var d = Open(overflow: true);
         Assert.False(d.ButtonDown(OnTray, Overflow));
         Assert.True(d.ButtonDown(Elsewhere, Overflow));
+    }
+
+    [Fact]
+    public void TaskbarClick_ClosesAtOnceWhenOpenedOverTheOverflow()
+    {
+        Assert.True(Open(overflow: true).ButtonDown(OnTaskbar, Overflow));
+        Assert.True(Open(overflow: true).ButtonDown(OnTaskbar, Taskbar));
+        Assert.True(AfterClick(overflow: true).ButtonDown(OnTaskbar, AppHiddenOwner));
+    }
+
+    [Fact]
+    public void TaskbarClick_KeepsOpenWhenNotOpenedOverTheOverflow()
+    {
+        Assert.False(Open().ButtonDown(OnTaskbar, Taskbar));
+        var atCursor = new PanelDismissal();
+        atCursor.Opened(Overflow.Window, overflowVisible: true, atCursor: true);
+        Assert.False(atCursor.ButtonDown(OnTaskbar, Taskbar));
+    }
+
+    [Fact]
+    public void TaskbarClick_KeepsOpenOnceTheOverflowHasGone()
+    {
+        var d = Open(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        Assert.False(d.ButtonDown(OnTaskbar, Taskbar));
+    }
+
+    [Fact]
+    public void Click_OnTheOverflowOrThePanelKeepsOpenEvenOverTheOverflow()
+    {
+        var d = Open(overflow: true);
+        Assert.False(d.ButtonDown(OnTray, Overflow));
+        Assert.False(d.ButtonDown(OnTray, OtherApp));
+    }
+
+    [Fact]
+    public void TaskbarClick_DuringATrackedMenuFollowsTheMenuRules()
+    {
+        var d = AfterClick(overflow: true);
+        d.MenuStarted(App);
+        Assert.False(d.ButtonDown(OnTaskbar, AppHiddenOwner));
+        Assert.False(d.MenuEnded(App, AppHiddenOwner));
+    }
+
+    [Fact]
+    public void TaskbarClick_OverlappingTheAppsMenuIsAMenuClick()
+    {
+        var d = AfterClick(overflow: true);
+        d.MenuStarted(App);
+        Assert.False(d.ButtonDown(OnTaskbar with { OnMenu = true }, AppHiddenOwner));
+
+        var popup = AfterClick(overflow: true);
+        popup.ForegroundChanged(AppPopupMenu);
+        Assert.False(popup.ButtonDown(OnTaskbar with { OnForeground = true }, AppPopupMenu));
+        Assert.False(popup.ButtonDown(OnTaskbar, AppPopupMenu));
     }
 
     [Fact]

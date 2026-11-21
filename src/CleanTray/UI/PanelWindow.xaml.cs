@@ -23,7 +23,7 @@ public partial class PanelWindow : Window
     readonly Action<byte[]> _send;
     readonly Func<Rect> _anchor;
     readonly Func<IReadOnlyList<string>> _savedOrder;
-    readonly Action<IReadOnlyList<string>> _commitOrder;
+    readonly Func<IReadOnlyList<string>, SaveOutcome> _commitOrder;
     readonly Func<Rect>? _placeAt;
     readonly PanelDismissal _dismissal = new();
     readonly PanelDrag _drag;
@@ -49,7 +49,7 @@ public partial class PanelWindow : Window
     /// <param name="commitOrder">Saves the order the user dropped the icons in.</param>
     /// <param name="placeAt">Where to open instead of at <paramref name="anchor"/>, such as the cursor.</param>
     internal PanelWindow(IconRegistry registry, Action<byte[]> send, Func<Rect> anchor,
-        Func<IReadOnlyList<string>> savedOrder, Action<IReadOnlyList<string>> commitOrder, Func<Rect>? placeAt = null)
+        Func<IReadOnlyList<string>> savedOrder, Func<IReadOnlyList<string>, SaveOutcome> commitOrder, Func<Rect>? placeAt = null)
     {
         InitializeComponent();
         _registry = registry;
@@ -137,8 +137,7 @@ public partial class PanelWindow : Window
         var next = PanelOrder.Commit(saved, shown);
         // Two icons with one key can swap places without the saved order changing.
         if (next.SequenceEqual(saved)) return;
-        _commitOrder(next);
-        Log.Write($"panel: reordered {shown.Count} icons");
+        if (_commitOrder(next) == SaveOutcome.Saved) Log.Write($"panel: reordered {shown.Count} icons");
     }
 
     // Registry changes fire for every icon in the tray, so buttons are kept and updated in place:
@@ -404,8 +403,8 @@ public partial class PanelWindow : Window
             {
                 int x = Marshal.ReadInt32(lParam), y = Marshal.ReadInt32(lParam, 4);
                 var fg = CurrentForeground();
-                var at = new ClickPoint(IsOverTray(x, y), IsOverMenu(x, y), IsShown(fg.Window, out var r) && Contains(r, x, y));
-                if (_dismissal.ButtonDown(at, fg)) CloseSoon("outside click", fg);
+                var at = new ClickPoint(IsOverTray(x, y), IsOverMenu(x, y), IsShown(fg.Window, out var r) && Contains(r, x, y), IsOverTaskbar(x, y));
+                if (_dismissal.ButtonDown(at, fg)) CloseSoon(at.OnTaskbar ? "taskbar click" : "outside click", fg);
             }
         }
         catch (Exception ex)
@@ -420,6 +419,16 @@ public partial class PanelWindow : Window
     {
         if (IsShown(_hwnd, out var r) && Contains(r, x, y)) return true;
         if (IsShown(_overflow, out r) && Contains(r, x, y)) return true;
+        foreach (var t in _taskbars)
+            if (IsShown(t, out r) && Contains(r, x, y)) return true;
+        return false;
+    }
+
+    // The taskbars can extend under the overflow and the panel, which sit above them.
+    bool IsOverTaskbar(int x, int y)
+    {
+        if (IsShown(_hwnd, out var r) && Contains(r, x, y)) return false;
+        if (IsShown(_overflow, out r) && Contains(r, x, y)) return false;
         foreach (var t in _taskbars)
             if (IsShown(t, out r) && Contains(r, x, y)) return true;
         return false;

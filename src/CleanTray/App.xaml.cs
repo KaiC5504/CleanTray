@@ -266,10 +266,10 @@ public partial class App : Application
         _panel.Show();
     }
 
-    void CommitPanelOrder(IReadOnlyList<string> order)
+    SaveOutcome CommitPanelOrder(IReadOnlyList<string> order)
     {
         _settings.PanelOrder = order.ToList();
-        CommitNow();
+        return CommitNow();
     }
 
     void OpenSettings()

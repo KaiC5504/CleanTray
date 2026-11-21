@@ -19,9 +19,9 @@ sealed class PanelDrag : IDisposable
 
     readonly Panel _items;
     readonly FrameworkElement _frame;
-    readonly DispatcherTimer _hold = new() { Interval = HoldTime };
+    readonly DispatcherTimer _hold = new(DispatcherPriority.Input) { Interval = HoldTime };
     // The panel never has keyboard focus, so Esc can only be polled, and only while a drag needs it.
-    readonly DispatcherTimer _escape = new() { Interval = EscapePoll };
+    readonly DispatcherTimer _escape = new(DispatcherPriority.Input) { Interval = EscapePoll };
     Button? _pressed;
     Point _pressedAt;
     int _liftedFrom;
@@ -80,8 +80,7 @@ sealed class PanelDrag : IDisposable
         _pressed = null;
         if (button is null || Mouse.LeftButton != MouseButtonState.Pressed || !_items.Children.Contains(button)) return;
 
-        // Taking the capture off the button cancels its press, so the release can't be a click. The
-        // button's own LostMouseCapture passes through the panel, hence Dragged is set only after.
+        // Taking the capture off the button cancels its press, so the release can't be a click.
         if (!_items.CaptureMouse()) return;
         Dragged = button;
         _liftedFrom = _items.Children.IndexOf(button);
