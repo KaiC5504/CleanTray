@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# Builds CleanTray and installs it for the current user. No admin needed.
+# Builds CleanTray and installs it for the current user, with a Start menu shortcut. No admin needed.
 # Explorer is never restarted: the app stages the hook DLL by content hash before injecting it,
 # so a copy still pinned in Explorer never blocks overwriting the install folder.
 param(
@@ -53,6 +53,16 @@ Copy-Item (Join-Path $publish '*') $InstallDir -Recurse -Force
 Set-Content (Join-Path $InstallDir 'installed.marker') "Installed by scripts/install.ps1 on $(Get-Date -Format s)"
 
 $installed = Join-Path $InstallDir 'CleanTray.exe'
+
+# Save() overwrites, so installing again just refreshes the shortcut.
+$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut(
+    (Join-Path ([Environment]::GetFolderPath('Programs')) 'CleanTray.lnk'))
+$shortcut.TargetPath = $installed
+$shortcut.WorkingDirectory = $InstallDir
+$shortcut.IconLocation = "$installed,0"
+$shortcut.Description = 'CleanTray'
+$shortcut.Save()
+
 $exit = Wait-Exit (Start-Process $installed -ArgumentList '--register-autostart' -PassThru) 30 'CleanTray --register-autostart'
 if ($exit) { Write-Warning "CleanTray --register-autostart exited $exit" }
 
