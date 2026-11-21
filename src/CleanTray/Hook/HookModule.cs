@@ -10,36 +10,52 @@ static class HookModule
     const string DllName = "CleanTrayHook.dll";
 
     static readonly object Gate = new();
+    static readonly HashSet<string> MissingExports = new();
     static IntPtr _module;
+    static bool _loadFailed;
 
-    /// <summary>The module handle, or zero if the DLL can't be loaded (logged). A failure is retried on the next call.</summary>
+    /// <summary>The module handle, or zero if the DLL can't be loaded. A failure is logged once and then remembered.</summary>
     public static IntPtr Load()
     {
         lock (Gate)
         {
-            if (_module != IntPtr.Zero) return _module;
-            var shipped = Path.Combine(AppContext.BaseDirectory, DllName);
-            if (!File.Exists(shipped))
-            {
-                Log.Write($"inject: {shipped} is missing");
-                return IntPtr.Zero;
-            }
-            var path = StageCopy(shipped) ?? shipped;
-            _module = Win32.LoadLibraryExW(path, IntPtr.Zero, 0);
-            if (_module == IntPtr.Zero)
-                Log.Write($"inject: LoadLibrary({path}) failed, error {Marshal.GetLastPInvokeError()}");
+            if (_module != IntPtr.Zero || _loadFailed) return _module;
+            _module = TryLoad();
+            _loadFailed = _module == IntPtr.Zero;
             return _module;
         }
     }
 
-    /// <summary>The export's address, or zero (logged).</summary>
+    /// <summary>The export's address, or zero. A missing export is logged once.</summary>
     public static IntPtr Export(string name)
     {
-        var module = Load();
-        if (module == IntPtr.Zero) return IntPtr.Zero;
-        var proc = Win32.GetProcAddress(module, name);
-        if (proc == IntPtr.Zero) Log.Write($"inject: {name} not exported by {DllName}");
-        return proc;
+        lock (Gate)
+        {
+            var module = Load();
+            if (module == IntPtr.Zero || MissingExports.Contains(name)) return IntPtr.Zero;
+            var proc = Win32.GetProcAddress(module, name);
+            if (proc == IntPtr.Zero)
+            {
+                MissingExports.Add(name);
+                Log.Write($"inject: {name} not exported by {DllName}");
+            }
+            return proc;
+        }
+    }
+
+    // File names only in the log: full paths would name the user's folders.
+    static IntPtr TryLoad()
+    {
+        var shipped = Path.Combine(AppContext.BaseDirectory, DllName);
+        if (!File.Exists(shipped))
+        {
+            Log.Write($"inject: {DllName} is missing");
+            return IntPtr.Zero;
+        }
+        var module = Win32.LoadLibraryExW(StageCopy(shipped) ?? shipped, IntPtr.Zero, 0);
+        if (module == IntPtr.Zero)
+            Log.Write($"inject: LoadLibrary({DllName}) failed, error {Marshal.GetLastPInvokeError()}");
+        return module;
     }
 
     // Explorer pins the DLL until it restarts, so injecting the shipped file would lock it
