@@ -25,7 +25,9 @@ public enum OverflowOutcome { Keep, Reopen, Close }
 /// reopened once per click instead, and the panel closes if that fails. The exception is the menu of the app whose icon
 /// was just clicked: a Win32 menu (tracked through its popup start/end events) or an uncaptioned
 /// popup window such as Steam's. A captioned window of that app means the user picked something that
-/// opened a real window, so the panel closes.
+/// opened a real window, so the panel closes. Picking an item that opens nothing, such as Exit, keeps it:
+/// a quitting app hands the foreground to some other window, so foreground changes shortly after an
+/// item are held until it is clear whether the app went away (<see cref="ClickedAppLeft"/>).
 /// </summary>
 public sealed class PanelDismissal
 {
@@ -37,6 +39,9 @@ public sealed class PanelDismissal
     // One reopen per click inside the panel, so an overflow that keeps closing can't loop.
     bool _reopenArmed;
     bool _reopenPending;
+    bool _itemChosen;
+    bool _clickedLeft;
+    bool _closeHeld;
 
     /// <param name="foreground">The window in front just before the panel showed.</param>
     /// <param name="overflowVisible">Whether the Windows overflow flyout was showing then.</param>
@@ -47,6 +52,7 @@ public sealed class PanelDismissal
         _overflowAtOpen = overflowVisible && !atCursor;
         _reopenArmed = true;
         _reopenPending = false;
+        _itemChosen = _clickedLeft = _closeHeld = false;
     }
 
     /// <summary>Whether the overflow closing can still close the panel, so its hide event is worth hooking.</summary>
@@ -58,6 +64,31 @@ public sealed class PanelDismissal
         _reopenArmed = true;
         _menuDepth = 0;
         _lastMenuClickOutside = false;
+        _itemChosen = _clickedLeft = _closeHeld = false;
+    }
+
+    /// <summary>
+    /// An item of the clicked app's menu was clicked, and nothing has yet shown whether the app is quitting.
+    /// The caller ends the wait with <see cref="ExitWaitEnded"/> or <see cref="ClickedAppLeft"/>.
+    /// </summary>
+    public bool AwaitingExit => _itemChosen && !_clickedLeft;
+
+    /// <summary>The clicked app's last icon has gone, as it does when the app quits.</summary>
+    /// <returns>True when <paramref name="pid"/> is the clicked app and this is news.</returns>
+    public bool ClickedAppLeft(uint pid)
+    {
+        if (!IsClickedApp(pid) || _clickedLeft) return false;
+        _clickedLeft = true;
+        _closeHeld = false;
+        return true;
+    }
+
+    /// <returns>True when a close held during the wait still stands, because the app did not quit.</returns>
+    public bool ExitWaitEnded()
+    {
+        var close = _closeHeld && !_clickedLeft;
+        _itemChosen = _closeHeld = false;
+        return close;
     }
 
     /// <returns>True when the menu belongs to the clicked app and is now tracked.</returns>
@@ -74,8 +105,8 @@ public sealed class PanelDismissal
     {
         if (!IsClickedApp(pid) || _menuDepth == 0) return false;
         if (--_menuDepth > 0) return false;
-        // A click outside the tray that ended the menu either chose an item or went elsewhere.
-        return _lastMenuClickOutside || ShouldCloseFor(fg);
+        // The click that ended the menu went somewhere other than the menu and the tray.
+        return _lastMenuClickOutside || CloseFor(fg);
     }
 
     /// <returns>True when the panel should close.</returns>
@@ -85,9 +116,10 @@ public sealed class PanelDismissal
         var onMenu = at.OnMenu || (at.OnForeground && IsAppPopup(fg));
         var insideTray = at.OnTray && !onMenu;
         if (insideTray) _reopenArmed = true;
+        if (onMenu) _itemChosen = true;
         if (_menuDepth > 0)
         {
-            _lastMenuClickOutside = !insideTray;
+            _lastMenuClickOutside = !insideTray && !onMenu;
             return false;
         }
         if (!insideTray) return !IsAppPopup(fg);
@@ -103,8 +135,8 @@ public sealed class PanelDismissal
         if (fg.Window != 0 && fg.Window == _openedOver) return false;
         _openedOver = 0;
         // Another process taking over ends any menu too, so a missed end event can't pin the panel open.
-        if (fg.Pid != 0 && !fg.IsTray && !IsClickedApp(fg.Pid)) return true;
-        return _menuDepth == 0 && ShouldCloseFor(fg);
+        if (fg.Pid != 0 && !fg.IsTray && !IsClickedApp(fg.Pid)) return CloseFor(fg);
+        return _menuDepth == 0 && CloseFor(fg);
     }
 
     /// <summary>The overflow the panel opened with has gone, checked a moment after it hid.</summary>
@@ -115,8 +147,9 @@ public sealed class PanelDismissal
     /// </remarks>
     public OverflowOutcome OverflowClosed(bool pointerOverPanel, ForegroundInfo fg)
     {
-        if (!_overflowAtOpen || _reopenPending) return OverflowOutcome.Keep;
-        if (pointerOverPanel && _menuDepth == 0 && !IsAppPopup(fg))
+        if (!_overflowAtOpen || _reopenPending || AwaitingExit) return OverflowOutcome.Keep;
+        // An app that quit from its menu closed the overflow wherever the pointer had got to.
+        if ((pointerOverPanel || _clickedLeft) && _menuDepth == 0 && !IsAppPopup(fg))
         {
             // A real window of the clicked app is what the user picked, so the panel goes with the overflow.
             if (!_reopenArmed || (IsClickedApp(fg.Pid) && fg.Visible && fg.Caption))
@@ -149,10 +182,16 @@ public sealed class PanelDismissal
 
     bool IsAppPopup(ForegroundInfo fg) => IsClickedApp(fg.Pid) && fg.Visible && fg.Popup && !fg.Caption;
 
-    bool ShouldCloseFor(ForegroundInfo fg)
+    bool CloseFor(ForegroundInfo fg)
     {
-        if (fg.Pid == 0 || fg.IsTray) return false;
-        if (!IsClickedApp(fg.Pid)) return true;
+        // Once the app has quit, Windows hands the foreground on to whatever window is next.
+        if (fg.Pid == 0 || fg.IsTray || _clickedLeft) return false;
+        if (!IsClickedApp(fg.Pid))
+        {
+            if (!AwaitingExit) return true;
+            _closeHeld = true;
+            return false;
+        }
         // Apps put their hidden tray window in the foreground before showing a menu.
         if (!fg.Visible) return false;
         return !IsAppPopup(fg);

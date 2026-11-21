@@ -17,6 +17,9 @@ public partial class PanelWindow : Window
     const int GapDip = 8;
     // Long enough for an overflow closed by our own click to be told apart from one the user left.
     static readonly TimeSpan OverflowSettle = TimeSpan.FromMilliseconds(150);
+    // From the click on a menu item to the app's icon going away when that item was Exit. Apps that
+    // take longer usually keep their windows, and so the foreground, until they remove the icon.
+    static readonly TimeSpan ExitWait = TimeSpan.FromMilliseconds(600);
 
     readonly IconRegistry _registry;
     readonly Action<byte[]> _send;
@@ -40,6 +43,7 @@ public partial class PanelWindow : Window
     IntPtr _overflowHook;
     IntPtr _mouseHook;
     DispatcherTimer? _overflowCheck;
+    DispatcherTimer? _exitWait;
     readonly CancellationTokenSource _closed = new();
     uint _clickedPid;
     bool _dark;
@@ -119,6 +123,11 @@ public partial class PanelWindow : Window
     // the pointer ends it at once.
     void OnRegistryChanged()
     {
+        if (_clickedPid != 0 && !_registry.All.Any(i => i.Pid == _clickedPid) && _dismissal.ClickedAppLeft(_clickedPid))
+        {
+            Log.Write($"panel: pid {_clickedPid} removed its icon, staying open");
+            if (_exitWait?.IsEnabled == true) EndExitWait();
+        }
         if (_drag.Dragged is not { } dragged)
         {
             Rebuild();
@@ -346,6 +355,7 @@ public partial class PanelWindow : Window
     void RemoveHooks()
     {
         _overflowCheck?.Stop();
+        _exitWait?.Stop();
         if (_winEventHook != IntPtr.Zero) Win32.UnhookWinEvent(_winEventHook);
         if (_overflowHook != IntPtr.Zero) Win32.UnhookWinEvent(_overflowHook);
         if (_mouseHook != IntPtr.Zero) Win32.UnhookWindowsHookEx(_mouseHook);
@@ -406,6 +416,36 @@ public partial class PanelWindow : Window
         return timer;
     }
 
+    void StartExitWait()
+    {
+        if (_closing) return;
+        if (_exitWait == null)
+        {
+            _exitWait = new DispatcherTimer { Interval = ExitWait };
+            _exitWait.Tick += (_, _) => EndExitWait();
+        }
+        _exitWait.Stop();
+        _exitWait.Start();
+    }
+
+    void EndExitWait()
+    {
+        _exitWait?.Stop();
+        if (_closing) return;
+        if (_dismissal.ExitWaitEnded())
+        {
+            CloseSoon("foreground change after a menu item", CurrentForeground());
+            return;
+        }
+        // An overflow that hid during the wait was left undecided.
+        if (_dismissal.WatchesOverflow && !Win32.IsWindowVisible(_overflow))
+        {
+            _overflowCheck ??= NewOverflowCheck();
+            _overflowCheck.Stop();
+            _overflowCheck.Start();
+        }
+    }
+
     // Opening the app's menu can take the foreground and close the overflow, which would leave the
     // panel floating alone. Bring the overflow back, or close with it if that does not work.
     async void ReopenOverflow()
@@ -453,6 +493,7 @@ public partial class PanelWindow : Window
                 var fg = CurrentForeground();
                 var at = new ClickPoint(IsOverTray(x, y), IsOverMenu(x, y), IsShown(fg.Window, out var r) && Contains(r, x, y), IsOverTaskbar(x, y));
                 if (_dismissal.ButtonDown(at, fg)) CloseSoon(at.OnTaskbar ? "taskbar click" : "outside click", fg);
+                else if (_dismissal.AwaitingExit) Dispatcher.BeginInvoke(StartExitWait);
             }
         }
         catch (Exception ex)

@@ -181,7 +181,7 @@ public sealed class PanelDismissalTests
     }
 
     [Fact]
-    public void Win32Menu_ChoosingAnItemClosesWhenTheMenuEnds()
+    public void Win32Menu_ClickingOutsideTheMenuClosesWhenItEnds()
     {
         var d = AfterClick();
         d.MenuStarted(App);
@@ -457,7 +457,8 @@ public sealed class PanelDismissalTests
         var d = AfterClick();
         d.MenuStarted(App);
         Assert.False(d.ButtonDown(new ClickPoint(OnTray: true, OnMenu: true), AppHiddenOwner));
-        Assert.True(d.MenuEnded(App, AppHiddenOwner));
+        Assert.True(d.AwaitingExit);
+        Assert.False(d.MenuEnded(App, AppHiddenOwner));
     }
 
     [Fact]
@@ -500,5 +501,133 @@ public sealed class PanelDismissalTests
         d.MenuStarted(App);
         Assert.False(d.ForegroundChanged(None));
         Assert.False(d.MenuEnded(App, None));
+    }
+
+    // Not the window the panel opened over, which a foreground event may repeat.
+    static readonly ForegroundInfo NextApp = OtherApp with { Window = 0x21 };
+    static readonly ClickPoint OnMenuItem = new(OnTray: false, OnMenu: true);
+
+    static PanelDismissal AfterMenuItem(bool overflow = false)
+    {
+        var d = AfterClick(overflow);
+        d.MenuStarted(App);
+        Assert.False(d.ButtonDown(OnMenuItem, AppHiddenOwner));
+        return d;
+    }
+
+    [Fact]
+    public void MenuItem_ChoosingOneKeepsThePanelOpen()
+    {
+        var d = AfterMenuItem();
+        Assert.False(d.MenuEnded(App, AppHiddenOwner));
+        Assert.False(d.ExitWaitEnded());
+        Assert.False(d.AwaitingExit);
+    }
+
+    [Fact]
+    public void MenuItem_OpeningTheAppsWindowClosesAtOnce()
+    {
+        Assert.True(AfterMenuItem().MenuEnded(App, AppMainWindow));
+        var d = AfterMenuItem();
+        d.MenuEnded(App, AppHiddenOwner);
+        Assert.True(d.ForegroundChanged(AppMainWindow));
+    }
+
+    [Fact]
+    public void MenuItem_AnotherAppTakingTheForegroundClosesOnceTheWaitEnds()
+    {
+        var d = AfterMenuItem();
+        d.MenuEnded(App, AppHiddenOwner);
+        Assert.False(d.ForegroundChanged(NextApp));
+        Assert.True(d.ExitWaitEnded());
+    }
+
+    [Fact]
+    public void MenuItem_MenuEndingIntoAnotherAppClosesOnceTheWaitEnds()
+    {
+        var d = AfterMenuItem();
+        Assert.False(d.MenuEnded(App, NextApp));
+        Assert.True(d.ExitWaitEnded());
+    }
+
+    [Fact]
+    public void MenuItem_AppQuittingAfterTheForegroundMovedOnKeepsOpen()
+    {
+        var d = AfterMenuItem();
+        d.MenuEnded(App, AppHiddenOwner);
+        Assert.False(d.ForegroundChanged(NextApp));
+        Assert.True(d.ClickedAppLeft(App));
+        Assert.False(d.AwaitingExit);
+        Assert.False(d.ExitWaitEnded());
+    }
+
+    [Fact]
+    public void MenuItem_ForegroundMovingOnAfterTheAppQuitKeepsOpen()
+    {
+        var d = AfterMenuItem();
+        d.MenuEnded(App, AppHiddenOwner);
+        Assert.True(d.ClickedAppLeft(App));
+        Assert.False(d.ForegroundChanged(NextApp));
+        Assert.False(d.ForegroundChanged(Desktop));
+        Assert.False(d.ExitWaitEnded());
+    }
+
+    [Fact]
+    public void MenuItem_OutsideClickStillCloses()
+    {
+        var d = AfterMenuItem();
+        d.MenuEnded(App, AppHiddenOwner);
+        d.ClickedAppLeft(App);
+        Assert.True(d.ButtonDown(Elsewhere, NextApp));
+    }
+
+    [Fact]
+    public void MenuItem_ChosenFromTheAppsPopupWindowWaitsToo()
+    {
+        var d = AfterClick();
+        d.ForegroundChanged(AppPopupMenu);
+        Assert.False(d.ButtonDown(new ClickPoint(OnTray: false, OnForeground: true), AppPopupMenu));
+        Assert.True(d.AwaitingExit);
+        Assert.False(d.ForegroundChanged(NextApp));
+        Assert.True(d.ClickedAppLeft(App));
+        Assert.False(d.ExitWaitEnded());
+    }
+
+    [Fact]
+    public void ClickedAppLeft_AnotherProcessIsIgnored()
+    {
+        var d = AfterClick();
+        Assert.False(d.ClickedAppLeft(Other));
+        Assert.True(d.ForegroundChanged(NextApp));
+    }
+
+    [Fact]
+    public void ClickedAppLeft_ClickingAnotherIconStartsOver()
+    {
+        var d = AfterMenuItem();
+        d.ClickedAppLeft(App);
+        d.Clicked(Other);
+        Assert.False(d.AwaitingExit);
+        Assert.True(d.ForegroundChanged(Desktop));
+    }
+
+    [Fact]
+    public void OverflowClosed_WhileWaitingIsLeftForTheWaitsEnd()
+    {
+        var d = AfterMenuItem(overflow: true);
+        d.MenuEnded(App, AppHiddenOwner);
+        Assert.Equal(OverflowOutcome.Keep, d.OverflowClosed(pointerOverPanel: false, NextApp));
+        Assert.True(d.WatchesOverflow);
+        d.ExitWaitEnded();
+        Assert.Equal(OverflowOutcome.Close, d.OverflowClosed(pointerOverPanel: false, NextApp));
+    }
+
+    [Fact]
+    public void OverflowClosed_AfterTheClickedAppQuitReopensWhereverThePointerIs()
+    {
+        var d = AfterMenuItem(overflow: true);
+        d.MenuEnded(App, AppHiddenOwner);
+        d.ClickedAppLeft(App);
+        Assert.Equal(OverflowOutcome.Reopen, d.OverflowClosed(pointerOverPanel: false, NextApp));
     }
 }
