@@ -125,11 +125,35 @@
             <TextBlock Text="Apps" Style="{StaticResource Heading}" />
             <TextBlock Text="Choose which apps keep their icon in the taskbar and which sit inside CleanTray."
                        Style="{StaticResource Secondary}" Margin="0,2,0,0" />
+            <Grid Margin="0,10,0,0" HorizontalAlignment="Left" Width="360">
+                <TextBox x:Name="SearchBox" AutomationProperties.Name="Search apps"
+                         TextChanged="OnSearchChanged" KeyDown="OnSearchKeyDown" />
+                <TextBlock Text="Search apps" IsHitTestVisible="False" Margin="11,0,0,0" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Secondary}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text.Length, ElementName=SearchBox}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
         </StackPanel>
 
         <Grid Grid.Row="3">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="Apps" ItemTemplate="{StaticResource AppRowTemplate}" Margin="0,0,8,0" />
+                <StackPanel Margin="0,0,8,0">
+                    <ItemsControl x:Name="Apps" ItemTemplate="{StaticResource AppRowTemplate}" />
+                    <Expander x:Name="OtherSection" Margin="0,4,0,0" Visibility="Collapsed"
+                              Expanded="OnOtherToggled" Collapsed="OnOtherToggled">
+                        <ItemsControl x:Name="OtherApps" ItemTemplate="{StaticResource AppRowTemplate}" Margin="0,8,0,0" />
+                    </Expander>
+                    <TextBlock x:Name="NoMatchText" Style="{StaticResource Secondary}" Margin="0,8,0,0"
+                               Visibility="Collapsed" Text="No apps match your search." />
+                </StackPanel>
             </ScrollViewer>
             <TextBlock x:Name="EmptyText" Style="{StaticResource Secondary}" TextWrapping="Wrap" Margin="0,8,0,0"
                        Text="No apps yet. They appear here the first time they add a tray icon." />

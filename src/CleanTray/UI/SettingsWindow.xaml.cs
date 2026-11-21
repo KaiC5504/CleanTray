@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using CleanTray.Core;
@@ -13,11 +15,17 @@ public partial class SettingsWindow : Window
     static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(1);
 
     readonly SettingsHost _host;
-    readonly ObservableCollection<AppRow> _rows = new();
+    readonly ObservableCollection<AppRow> _seenRows = new();
+    readonly ObservableCollection<AppRow> _otherRows = new();
+    readonly ICollectionView _seenView;
+    readonly ICollectionView _otherView;
     readonly Dictionary<string, AppRow> _byKey = new();
     readonly Dictionary<string, byte[]?> _snapshots = new();
     readonly DispatcherTimer _refresh;
     readonly DispatcherTimer _hotkeyCommit;
+    string _query = "";
+    bool _otherOpen;
+    bool _settingSection;
     bool _loading;
     bool _closed;
 
@@ -25,7 +33,11 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
         _host = host;
-        Apps.ItemsSource = _rows;
+        _seenView = CollectionViewSource.GetDefaultView(_seenRows);
+        _otherView = CollectionViewSource.GetDefaultView(_otherRows);
+        _seenView.Filter = _otherView.Filter = row => ((AppRow)row).Matches(_query);
+        Apps.ItemsSource = _seenView;
+        OtherApps.ItemsSource = _otherView;
 
         _loading = true;
         ShowIcon.IsChecked = host.Settings.ShowMasterIcon;
@@ -66,11 +78,20 @@ public partial class SettingsWindow : Window
             return;
         }
         if (_closed) return;
-        foreach (var app in known) _snapshots.TryAdd(app.Key, app.IconPng);
-        foreach (var row in _rows) row.UseSnapshot(_snapshots.GetValueOrDefault(row.Key));
-        foreach (var entry in AppList.Build(_host.Settings, known, _host.OwnKey))
-            if (!_byKey.ContainsKey(entry.Rule.Key)) Add(entry);
-        Sync();
+        // Nothing awaits this task, so a failure here would otherwise vanish and leave a partial list.
+        try
+        {
+            foreach (var app in known) _snapshots.TryAdd(app.Key, app.IconPng);
+            foreach (var row in _byKey.Values) row.UseSnapshot(_snapshots.GetValueOrDefault(row.Key));
+            foreach (var entry in AppList.Build(_host.Settings, known, _host.OwnKey))
+                if (!_byKey.ContainsKey(entry.Rule.Key)) Add(entry);
+            Sync();
+            ApplyExpansion();
+        }
+        catch (Exception e)
+        {
+            Log.Write($"settings: adding Windows' tray apps failed: {LogText.Error(e)}");
+        }
     }
 
     /// <summary>Shows the window and takes the foreground, which a hotkey or a second launch may need help with.</summary>
@@ -91,21 +112,65 @@ public partial class SettingsWindow : Window
         var running = _host.Registry.All.ToLookup(i => i.AppKey);
         foreach (var rule in _host.Settings.Apps)
         {
-            if (AppList.IsCleanTray(rule.Key, _host.OwnKey)) continue;
+            if (AppList.IsExcluded(rule.Key, _host.OwnKey)) continue;
             if (_byKey.TryGetValue(rule.Key, out var row)) row.Bind(rule);
             else Add(new AppListEntry(AppListGroup.Seen, rule, _snapshots.GetValueOrDefault(rule.Key)));
         }
-        foreach (var row in _rows) row.Refresh(running[row.Key], now);
-        EmptyText.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var row in _byKey.Values) row.Refresh(running[row.Key], now);
+        ShowSections();
     }
 
     void Add(AppListEntry entry)
     {
         var row = new AppRow(entry, draft => AppList.Adopt(_host.Settings, draft, _host.OwnKey), Commit);
         _byKey[row.Key] = row;
+        var rows = row.Group == AppListGroup.Seen ? _seenRows : _otherRows;
         var i = 0;
-        while (i < _rows.Count && AppList.Compare(_rows[i].Group, _rows[i].Name, row.Group, row.Name) <= 0) i++;
-        _rows.Insert(i, row);
+        while (i < rows.Count && AppList.Compare(rows[i].Group, rows[i].Name, row.Group, row.Name) <= 0) i++;
+        rows.Insert(i, row);
+    }
+
+    // Runs with every Sync, so it only sets what differs.
+    void ShowSections()
+    {
+        var shown = _seenView.Cast<AppRow>().Count();
+        var other = _otherView.Cast<AppRow>().Count();
+        var title = AppSearch.OtherTitle(other);
+        if (!Equals(OtherSection.Header, title)) OtherSection.Header = title;
+        OtherSection.Visibility = other > 0 ? Visibility.Visible : Visibility.Collapsed;
+        EmptyText.Visibility = _byKey.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoMatchText.Visibility = _byKey.Count > 0 && shown + other == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // Not part of Sync: it would undo the user opening or closing the section.
+    void ApplyExpansion()
+    {
+        var open = AppSearch.OtherExpanded(_otherOpen, _query, _otherView.Cast<AppRow>().Count());
+        if (OtherSection.IsExpanded == open) return;
+        _settingSection = true;
+        OtherSection.IsExpanded = open;
+        _settingSection = false;
+    }
+
+    void OnOtherToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_settingSection) _otherOpen = OtherSection.IsExpanded;
+    }
+
+    void OnSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _query = SearchBox.Text;
+        _seenView.Refresh();
+        _otherView.Refresh();
+        ShowSections();
+        ApplyExpansion();
+    }
+
+    void OnSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || SearchBox.Text.Length == 0) return;
+        e.Handled = true;
+        SearchBox.Clear();
     }
 
     void Commit() => ShowBanner(_host.Commit());

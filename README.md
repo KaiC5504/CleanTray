@@ -7,7 +7,7 @@ Windows 11 can only move a tray icon between the taskbar and the `^` overflow; i
 ## Features
 
 - Per-app choice in Settings: **Show** or **Inside CleanTray**, with per-icon overrides for apps that show several icons.
-- Lists every app Windows has ever shown in the tray, including ones that were already running before CleanTray started.
+- Lists every app Windows has ever shown in the tray, including ones that were already running before CleanTray started. A search box finds apps by name or exe file name.
 - Clicks and right-click menus are forwarded to the real app.
 - Per-app pop-ups: a hidden app's balloon notifications can still be shown (as a Windows toast) or blocked.
 - Rules survive app updates (version folders such as Squirrel `app-1.2.3` and MSIX package versions are ignored).
@@ -53,7 +53,7 @@ ctest --test-dir build -C Release --output-on-failure
 pwsh scripts/install.ps1
 ```
 
-Builds, publishes and installs to `%LOCALAPPDATA%\Programs\CleanTray` (change with `-InstallDir`), registers the logon task, and starts CleanTray. No admin rights needed.
+Builds, publishes and installs to `%LOCALAPPDATA%\Programs\CleanTray` (change with `-InstallDir`), registers the logon task, adds a Start menu shortcut, and starts CleanTray. No admin rights needed.
 
 ## License
 

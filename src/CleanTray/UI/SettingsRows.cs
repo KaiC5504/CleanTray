@@ -21,13 +21,11 @@ sealed class AppRow : Observable
 {
     public static readonly string[] ModeChoices = ["Show", "Inside CleanTray"];
 
-    readonly Func<AppRule, AppRule> _adopt;
+    readonly RuleEditor _editor;
     readonly Action _changed;
     readonly Dictionary<string, IconRow> _iconRows = new();
-    AppRule _rule;
     string _path;
     byte[]? _snapshot;
-    bool _draft;
     ImageSource? _icon;
     bool _fallbackTried;
     string _lastSeen = "";
@@ -37,24 +35,26 @@ sealed class AppRow : Observable
     /// <param name="adopt">Puts a known app's draft rule into the settings, returning the rule to edit.</param>
     public AppRow(AppListEntry entry, Func<AppRule, AppRule> adopt, Action changed)
     {
-        _rule = entry.Rule;
-        _path = Resolved(_rule.ExePath);
-        _draft = entry.Group == AppListGroup.KnownOnly;
+        _editor = new RuleEditor(entry.Rule, entry.Group == AppListGroup.KnownOnly, adopt);
+        _path = Resolved(entry.Rule.ExePath);
         _snapshot = entry.IconPng;
-        _adopt = adopt;
         _changed = changed;
         Group = entry.Group;
     }
 
     /// <summary>The group the row was listed in; it keeps its place even after the app is seen.</summary>
     public AppListGroup Group { get; }
-    public string Key => _rule.Key;
-    public string Name => AppList.Name(_rule);
+    public string Key => Rule.Key;
+    public string Name => AppList.Name(Rule);
     public string Path => _path;
     public string ModeAutomationName => Name + " mode";
     public string PopupsAutomationName => AutomationText.ForCheckBox(Name + " pop-ups");
     public ObservableCollection<IconRow> Icons { get; } = new();
     public bool HasSubRows => Icons.Count > 1;
+
+    AppRule Rule => _editor.Rule;
+
+    public bool Matches(string? query) => AppSearch.Matches(Name, Rule.ExePath, query);
 
     public ImageSource? Icon
     {
@@ -79,28 +79,17 @@ sealed class AppRow : Observable
 
     public int ModeIndex
     {
-        get => ModeChoice.AppIndex(_rule.Mode);
+        get => ModeChoice.AppIndex(Rule.Mode);
         set
         {
-            if (!ModeChoice.TryApp(value, out var mode) || _rule.Mode == mode) return;
-            Persist();
-            _rule.Mode = mode;
-            Raise();
-            _changed();
+            if (ModeChoice.TryApp(value, out var mode)) Edit(mode, r => r.Mode, (r, v) => r.Mode = v);
         }
     }
 
     public bool Popups
     {
-        get => _rule.Popups;
-        set
-        {
-            if (_rule.Popups == value) return;
-            Persist();
-            _rule.Popups = value;
-            Raise();
-            _changed();
-        }
+        get => Rule.Popups;
+        set => Edit(value, r => r.Popups, (r, v) => r.Popups = v);
     }
 
     public bool IsExpanded
@@ -116,11 +105,9 @@ sealed class AppRow : Observable
     /// <summary>Switches the row to the settings' rule for its app, e.g. once a known app has been seen.</summary>
     public void Bind(AppRule rule)
     {
-        _draft = false;
-        if (ReferenceEquals(rule, _rule)) return;
-        _rule = rule;
-        _path = Resolved(rule.ExePath);
-        Raise(string.Empty);
+        var before = Rule;
+        _editor.Bind(rule);
+        if (!ReferenceEquals(before, rule)) Rebound();
     }
 
     /// <summary>Windows' own picture of the tray icon, shown until the app's live icon arrives.</summary>
@@ -138,17 +125,27 @@ sealed class AppRow : Observable
     public override string ToString() => Name;
 
     // Known apps stay out of settings.json until the user changes one.
-    void Persist()
+    void Edit<T>(T value, Func<AppRule, T> read, Action<AppRule, T> write, [CallerMemberName] string? property = null)
     {
-        if (_draft) Bind(_adopt(_rule));
+        var before = Rule;
+        if (!_editor.Set(value, read, write)) return;
+        if (!ReferenceEquals(before, Rule)) Rebound();
+        Raise(property);
+        _changed();
+    }
+
+    void Rebound()
+    {
+        _path = Resolved(Rule.ExePath);
+        Raise(string.Empty);
     }
 
     /// <summary>Brings the row up to date with the rule and the app's running icons.</summary>
     public void Refresh(IEnumerable<TrayIconInfo> running, DateTime nowUtc)
     {
-        LastSeen = LastSeenText.Format(_rule.LastSeenUtc, nowUtc);
+        LastSeen = LastSeenText.Format(Rule.LastSeenUtc, nowUtc);
 
-        foreach (var icon in _rule.Icons)
+        foreach (var icon in Rule.Icons)
         {
             if (_iconRows.TryGetValue(icon.IconPart, out var row))
             {
