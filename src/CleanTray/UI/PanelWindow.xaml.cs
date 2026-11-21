@@ -40,6 +40,8 @@ public partial class PanelWindow : Window
     IntPtr _overflowHook;
     IntPtr _mouseHook;
     DispatcherTimer? _overflowCheck;
+    readonly CancellationTokenSource _closed = new();
+    uint _clickedPid;
     bool _dark;
     bool _suppressClick;
     bool _closing;
@@ -77,7 +79,11 @@ public partial class PanelWindow : Window
         };
         Loaded += (_, _) => Reposition();
         SizeChanged += (_, _) => Reposition();
-        Closing += (_, _) => _closing = true;
+        Closing += (_, _) =>
+        {
+            _closing = true;
+            _closed.Cancel();
+        };
         Closed += OnClosed;
     }
 
@@ -248,6 +254,7 @@ public partial class PanelWindow : Window
         if (!Win32.AllowSetForegroundWindow(icon.Pid))
             Log.Write($"panel: AllowSetForegroundWindow({icon.Pid}) failed, error {Marshal.GetLastPInvokeError()}");
         _dismissal.Clicked(icon.Pid);
+        _clickedPid = icon.Pid;
         _menus.Clear();
         _send(CommandWriter.Click(icon.Id, kind, (int)Math.Round(center.X), (int)Math.Round(center.Y)));
         Log.Write($"panel: {kind} on icon {icon.Id} at {center.X:F0},{center.Y:F0}");
@@ -403,32 +410,33 @@ public partial class PanelWindow : Window
     // panel floating alone. Bring the overflow back, or close with it if that does not work.
     async void ReopenOverflow()
     {
-        Log.Write("panel: overflow closed with the pointer over the panel, reopening it");
-        OverflowOpener.Result result;
         try
         {
-            result = await OverflowOpener.ReopenAsync(_taskbars.ToArray(), _overflowRect);
+            Log.Write("panel: overflow closed with the pointer over the panel, reopening it");
+            var result = await OverflowOpener.ReopenAsync(_taskbars.ToArray(), _overflowRect, _clickedPid, _closed.Token);
+            if (_closing) return;
+            if (result.Window == IntPtr.Zero)
+            {
+                Log.Write($"panel: reopening the overflow failed: {result.Detail}");
+                if (_dismissal.ReopenFailed()) CloseSoon($"overflow closed (reopen failed: {result.Detail})", CurrentForeground());
+                return;
+            }
+            _overflow = result.Window;
+            IsShown(_overflow, out _overflowRect);
+            _dismissal.Reopened();
+            Log.Write($"panel: overflow reopened ({result.Detail})");
+            Reposition();
+            // The overflow can light-dismiss itself again before its hide event is watched for: check once more.
+            _overflowCheck ??= NewOverflowCheck();
+            _overflowCheck.Stop();
+            _overflowCheck.Start();
         }
         catch (Exception ex)
         {
-            result = new(IntPtr.Zero, LogText.Error(ex));
+            var error = LogText.Error(ex);
+            Log.Write($"panel: reopening the overflow failed: {error}");
+            if (!_closing && _dismissal.ReopenFailed()) CloseSoon($"overflow closed (reopen failed: {error})", CurrentForeground());
         }
-        if (_closing) return;
-        if (result.Window == IntPtr.Zero)
-        {
-            Log.Write($"panel: reopening the overflow failed: {result.Detail}");
-            if (_dismissal.ReopenFailed()) CloseSoon($"overflow closed (reopen failed: {result.Detail})", CurrentForeground());
-            return;
-        }
-        _overflow = result.Window;
-        IsShown(_overflow, out _overflowRect);
-        _dismissal.Reopened();
-        Log.Write($"panel: overflow reopened ({result.Detail})");
-        Reposition();
-        // The overflow can light-dismiss itself again before its hide event is watched for: check once more.
-        _overflowCheck ??= NewOverflowCheck();
-        _overflowCheck.Stop();
-        _overflowCheck.Start();
     }
 
     // Runs for every mouse event system-wide while the panel is open, so it only reads window state

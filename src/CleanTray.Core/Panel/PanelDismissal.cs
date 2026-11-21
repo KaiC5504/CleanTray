@@ -118,7 +118,8 @@ public sealed class PanelDismissal
         if (!_overflowAtOpen || _reopenPending) return OverflowOutcome.Keep;
         if (pointerOverPanel && _menuDepth == 0 && !IsAppPopup(fg))
         {
-            if (!_reopenArmed)
+            // A real window of the clicked app is what the user picked, so the panel goes with the overflow.
+            if (!_reopenArmed || (IsClickedApp(fg.Pid) && fg.Visible && fg.Caption))
             {
                 _overflowAtOpen = false;
                 return OverflowOutcome.Close;

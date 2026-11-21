@@ -378,6 +378,14 @@ public sealed class PanelDismissalTests
     }
 
     [Fact]
+    public void OverflowClosed_IntoTheClickedAppsMainWindowWithThePointerOverThePanelCloses()
+    {
+        var d = AfterClick(overflow: true);
+        Assert.Equal(OverflowOutcome.Close, d.OverflowClosed(pointerOverPanel: true, AppMainWindow));
+        Assert.False(d.WatchesOverflow);
+    }
+
+    [Fact]
     public void OverflowClosed_NeverReopensForAPanelNotOpenedOverTheOverflow()
     {
         Assert.Equal(OverflowOutcome.Keep, Open().OverflowClosed(pointerOverPanel: true, Taskbar));

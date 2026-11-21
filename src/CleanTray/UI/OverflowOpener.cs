@@ -27,31 +27,50 @@ static class OverflowOpener
 
     /// <param name="taskbars">The taskbar windows, one of which holds the chevron.</param>
     /// <param name="lastOverflow">Where the overflow was showing; it opens directly above its chevron.</param>
-    internal static async Task<Result> ReopenAsync(IReadOnlyList<IntPtr> taskbars, Win32.RECT lastOverflow)
+    /// <param name="clickedPid">The app whose icon was clicked; with Explorer and this process, the only
+    /// foreground owners input is sent over.</param>
+    /// <param name="panelClosed">Cancelled when the panel goes, so a late attempt does not open an overflow with no panel.</param>
+    internal static async Task<Result> ReopenAsync(IReadOnlyList<IntPtr> taskbars, Win32.RECT lastOverflow, uint clickedPid, CancellationToken panelClosed)
     {
-        var work = Task.Run(() => Reopen(taskbars, lastOverflow));
-        if (await Task.WhenAny(work, Task.Delay(Overall)) != work) return new(IntPtr.Zero, "timed out");
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(panelClosed);
+        var token = cts.Token;
+        var work = Task.Run(() => Reopen(taskbars, lastOverflow, clickedPid, token));
+        if (await Task.WhenAny(work, Task.Delay(Overall, token)) != work)
+        {
+            // The worker may still be inside UI Automation; it stops before sending anything once it returns.
+            cts.Cancel();
+            return new(IntPtr.Zero, panelClosed.IsCancellationRequested ? "panel closed" : "timed out");
+        }
         return await work;
     }
 
-    static Result Reopen(IReadOnlyList<IntPtr> taskbars, Win32.RECT lastOverflow)
+    static Result Reopen(IReadOnlyList<IntPtr> taskbars, Win32.RECT lastOverflow, uint clickedPid, CancellationToken cancel)
     {
         try
         {
             if (taskbars.Count == 0) return new(IntPtr.Zero, "no taskbar");
+            if (lastOverflow.Width <= 0 || lastOverflow.Height <= 0) return new(IntPtr.Zero, "overflow position unknown");
+
+            // Looked up before any input is sent: nothing is pressed when there is nothing to invoke.
+            var chevron = FindChevron(taskbars, lastOverflow);
+            if (chevron is null) return new(IntPtr.Zero, "chevron not found");
+
+            Win32.GetWindowThreadProcessId(taskbars[0], out var explorer);
+            // Input goes to whatever is in front, so it is only sent while that is Explorer, this
+            // process or the clicked app (a menu or flyout of it), never during unrelated activity.
+            if (!IsOurs(explorer, clickedPid)) return new(IntPtr.Zero, "foreground not ours");
+            if (cancel.IsCancellationRequested) return new(IntPtr.Zero, "cancelled");
+
             // The click that got us here may not count as input to this process (a menu swallowed it), and
             // Explorer's flyout light-dismisses within ~150 ms when it is not allowed to take the foreground.
             // Sending input ourselves makes this the process that has last received some.
             Win32.keybd_event(UnassignedKey, 0, 0, 0);
             Win32.keybd_event(UnassignedKey, 0, KeyUp, 0);
-
-            Win32.GetWindowThreadProcessId(taskbars[0], out var explorer);
             // Lets Explorer take the foreground for the flyout.
             var allowed = Win32.AllowSetForegroundWindow(explorer);
             var allowDetail = allowed ? "foreground allowed" : $"foreground not allowed, error {Marshal.GetLastPInvokeError()}";
 
-            var chevron = FindChevron(taskbars, lastOverflow);
-            if (chevron is null) return new(IntPtr.Zero, $"chevron not found, {allowDetail}");
+            if (cancel.IsCancellationRequested) return new(IntPtr.Zero, "cancelled");
             ((InvokePattern)chevron.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
 
             var deadline = DateTime.UtcNow + VerifyWindow;
@@ -68,6 +87,14 @@ static class OverflowOpener
         {
             return new(IntPtr.Zero, LogText.Error(ex));
         }
+    }
+
+    static bool IsOurs(uint explorer, uint clickedPid)
+    {
+        var fg = Win32.GetForegroundWindow();
+        if (fg == IntPtr.Zero) return false;
+        Win32.GetWindowThreadProcessId(fg, out var pid);
+        return pid != 0 && (pid == explorer || pid == (uint)Environment.ProcessId || pid == clickedPid);
     }
 
     // The button's name is localized and other tray buttons share its class and automation id, so
@@ -89,11 +116,20 @@ static class OverflowOpener
                 var dx = r.Left + r.Width / 2 - cx;
                 var dy = r.Top + r.Height / 2 - cy;
                 var distance = dx * dx + dy * dy;
-                if (distance >= bestDistance) continue;
+                if (distance >= bestDistance || Gap(r, lastOverflow) > r.Width) continue;
                 best = button;
                 bestDistance = distance;
             }
         }
         return best;
+    }
+
+    // The overflow opens flush above its chevron (no gap measured), so a button further from it than
+    // its own width, which also scales with DPI, belongs to another taskbar or is not the chevron.
+    static double Gap(Rect button, Win32.RECT overflow)
+    {
+        var dx = Math.Max(0, Math.Max(overflow.Left - button.Right, button.Left - overflow.Right));
+        var dy = Math.Max(0, Math.Max(overflow.Top - button.Bottom, button.Top - overflow.Bottom));
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 }
