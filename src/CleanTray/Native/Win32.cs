@@ -218,6 +218,9 @@ static class Win32
     public static extern bool SetForegroundWindow(IntPtr hwnd);
 
     [DllImport("user32.dll")]
+    public static extern void keybd_event(byte vk, byte scan, uint flags, nuint extraInfo);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr CreatePopupMenu();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

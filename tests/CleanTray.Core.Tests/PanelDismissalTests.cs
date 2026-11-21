@@ -97,6 +97,7 @@ public sealed class PanelDismissalTests
     {
         var d = Open(overflow: true);
         d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        d.ReopenFailed();
         Assert.False(d.ButtonDown(OnTaskbar, Taskbar));
     }
 
@@ -271,22 +272,124 @@ public sealed class PanelDismissalTests
     [Fact]
     public void OverflowClosed_PointerElsewhereCloses()
     {
-        Assert.True(Open(overflow: true).OverflowClosed(pointerOverPanel: false, Taskbar));
+        Assert.Equal(OverflowOutcome.Close, Open(overflow: true).OverflowClosed(pointerOverPanel: false, Taskbar));
     }
 
     [Fact]
-    public void OverflowClosed_PointerOverThePanelKeepsOpenOnce()
+    public void OverflowClosed_PointerOverThePanelAsksToReopenOnce()
     {
         var d = Open(overflow: true);
-        Assert.False(d.OverflowClosed(pointerOverPanel: true, Taskbar));
-        // From then on only clicks and the foreground decide.
-        Assert.False(d.OverflowClosed(pointerOverPanel: false, Taskbar));
+        Assert.Equal(OverflowOutcome.Reopen, d.OverflowClosed(pointerOverPanel: true, Taskbar));
+        d.Reopened();
+        Assert.True(d.WatchesOverflow);
+        Assert.Equal(OverflowOutcome.Close, d.OverflowClosed(pointerOverPanel: true, Taskbar));
+    }
+
+    [Fact]
+    public void OverflowClosed_ASecondCloseWithoutANewClickClosesEvenAwayFromThePanel()
+    {
+        var d = Open(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        d.Reopened();
+        Assert.Equal(OverflowOutcome.Close, d.OverflowClosed(pointerOverPanel: false, Taskbar));
+    }
+
+    [Fact]
+    public void OverflowClosed_ANewClickInThePanelRearmsTheReopen()
+    {
+        var d = Open(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        d.Reopened();
+        d.ButtonDown(OnTray, Overflow);
+        Assert.Equal(OverflowOutcome.Reopen, d.OverflowClosed(pointerOverPanel: true, Taskbar));
+    }
+
+    [Fact]
+    public void OverflowClosed_ClickingAnIconRearmsTheReopen()
+    {
+        var d = AfterClick(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        d.Reopened();
+        d.Clicked(App);
+        Assert.Equal(OverflowOutcome.Reopen, d.OverflowClosed(pointerOverPanel: true, Taskbar));
+    }
+
+    [Fact]
+    public void OverflowClosed_AClickThatDismissesAMenuInThePanelRearmsTheReopen()
+    {
+        var d = AfterClick(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        d.Reopened();
+        d.MenuStarted(App);
+        Assert.False(d.ButtonDown(OnTray, AppHiddenOwner));
+        d.MenuEnded(App, AppHiddenOwner);
+        Assert.Equal(OverflowOutcome.Reopen, d.OverflowClosed(pointerOverPanel: true, AppHiddenOwner));
+    }
+
+    [Fact]
+    public void OverflowClosed_AClickOutsideTheTrayDoesNotRearmTheReopen()
+    {
+        var d = Open(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        d.Reopened();
+        d.ButtonDown(Elsewhere, AppPopupMenu);
+        Assert.Equal(OverflowOutcome.Close, d.OverflowClosed(pointerOverPanel: true, Taskbar));
+    }
+
+    [Fact]
+    public void OverflowClosed_WhileAReopenIsPendingKeepsOpen()
+    {
+        var d = Open(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        Assert.Equal(OverflowOutcome.Keep, d.OverflowClosed(pointerOverPanel: true, Taskbar));
+        d.Reopened();
+        Assert.Equal(OverflowOutcome.Close, d.OverflowClosed(pointerOverPanel: true, Taskbar));
+    }
+
+    [Fact]
+    public void ReopenFailed_ClosesThePanelAndStopsWatching()
+    {
+        var d = Open(overflow: true);
+        d.OverflowClosed(pointerOverPanel: true, Taskbar);
+        Assert.True(d.ReopenFailed());
+        Assert.False(d.WatchesOverflow);
+    }
+
+    [Fact]
+    public void OverflowClosed_DuringAWin32MenuWithThePointerOverThePanelDoesNotReopen()
+    {
+        var d = AfterClick(overflow: true);
+        d.MenuStarted(App);
+        Assert.Equal(OverflowOutcome.Keep, d.OverflowClosed(pointerOverPanel: true, AppHiddenOwner));
+    }
+
+    [Fact]
+    public void OverflowClosed_UnderTheClickedAppsPopupDoesNotReopen()
+    {
+        var d = AfterClick(overflow: true);
+        Assert.Equal(OverflowOutcome.Keep, d.OverflowClosed(pointerOverPanel: true, AppPopupMenu));
+    }
+
+    [Fact]
+    public void OverflowClosed_AfterTheClickedAppTookTheForegroundReopens()
+    {
+        var d = AfterClick(overflow: true);
+        Assert.Equal(OverflowOutcome.Reopen, d.OverflowClosed(pointerOverPanel: true, AppHiddenOwner));
+    }
+
+    [Fact]
+    public void OverflowClosed_NeverReopensForAPanelNotOpenedOverTheOverflow()
+    {
+        Assert.Equal(OverflowOutcome.Keep, Open().OverflowClosed(pointerOverPanel: true, Taskbar));
+        var atCursor = new PanelDismissal();
+        atCursor.Opened(Overflow.Window, overflowVisible: true, atCursor: true);
+        Assert.Equal(OverflowOutcome.Keep, atCursor.OverflowClosed(pointerOverPanel: true, Taskbar));
     }
 
     [Fact]
     public void OverflowClosed_IgnoredWhenThePanelDidNotOpenWithIt()
     {
-        Assert.False(Open().OverflowClosed(pointerOverPanel: false, Taskbar));
+        Assert.Equal(OverflowOutcome.Keep, Open().OverflowClosed(pointerOverPanel: false, Taskbar));
     }
 
     [Theory]
@@ -295,7 +398,7 @@ public sealed class PanelDismissalTests
     public void OverflowClosed_ByTheClickedAppsMenuKeepsOpen(bool popup)
     {
         var d = AfterClick(overflow: true);
-        Assert.False(d.OverflowClosed(pointerOverPanel: false, popup ? AppPopupMenu : AppHiddenOwner));
+        Assert.Equal(OverflowOutcome.Keep, d.OverflowClosed(pointerOverPanel: false, popup ? AppPopupMenu : AppHiddenOwner));
     }
 
     [Fact]
@@ -303,14 +406,14 @@ public sealed class PanelDismissalTests
     {
         var d = AfterClick(overflow: true);
         d.MenuStarted(App);
-        Assert.False(d.OverflowClosed(pointerOverPanel: false, AppHiddenOwner));
+        Assert.Equal(OverflowOutcome.Keep, d.OverflowClosed(pointerOverPanel: false, AppHiddenOwner));
     }
 
     [Fact]
     public void OverflowClosed_IntoTheClickedAppsMainWindowCloses()
     {
         var d = AfterClick(overflow: true);
-        Assert.True(d.OverflowClosed(pointerOverPanel: false, AppMainWindow));
+        Assert.Equal(OverflowOutcome.Close, d.OverflowClosed(pointerOverPanel: false, AppMainWindow));
     }
 
     [Fact]
@@ -319,7 +422,7 @@ public sealed class PanelDismissalTests
         var d = new PanelDismissal();
         d.Opened(Overflow.Window, overflowVisible: true, atCursor: true);
         Assert.False(d.WatchesOverflow);
-        Assert.False(d.OverflowClosed(pointerOverPanel: false, Taskbar));
+        Assert.Equal(OverflowOutcome.Keep, d.OverflowClosed(pointerOverPanel: false, Taskbar));
     }
 
     [Fact]

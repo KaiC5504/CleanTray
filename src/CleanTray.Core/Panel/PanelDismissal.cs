@@ -14,11 +14,15 @@ public readonly record struct ForegroundInfo(uint Pid, bool IsTray, bool Visible
 /// </summary>
 public readonly record struct ClickPoint(bool OnTray, bool OnMenu = false, bool OnForeground = false, bool OnTaskbar = false);
 
+/// <summary>What the panel does once the overflow it opened with has gone.</summary>
+public enum OverflowOutcome { Keep, Reopen, Close }
+
 /// <summary>
 /// Decides when the panel closes. The panel never takes activation, so the Windows overflow it was
 /// opened from keeps the foreground and stays open beside it. The panel goes away on a click outside
 /// it and the tray, when something other than the tray takes the foreground, or when the overflow it
-/// opened with closes while the pointer is elsewhere. The exception is the menu of the app whose icon
+/// opened with closes while the pointer is elsewhere. With the pointer over the panel the overflow is
+/// reopened once per click instead, and the panel closes if that fails. The exception is the menu of the app whose icon
 /// was just clicked: a Win32 menu (tracked through its popup start/end events) or an uncaptioned
 /// popup window such as Steam's. A captioned window of that app means the user picked something that
 /// opened a real window, so the panel closes.
@@ -30,6 +34,9 @@ public sealed class PanelDismissal
     uint _clickedPid;
     int _menuDepth;
     bool _lastMenuClickOutside;
+    // One reopen per click inside the panel, so an overflow that keeps closing can't loop.
+    bool _reopenArmed;
+    bool _reopenPending;
 
     /// <param name="foreground">The window in front just before the panel showed.</param>
     /// <param name="overflowVisible">Whether the Windows overflow flyout was showing then.</param>
@@ -38,6 +45,8 @@ public sealed class PanelDismissal
     {
         _openedOver = foreground;
         _overflowAtOpen = overflowVisible && !atCursor;
+        _reopenArmed = true;
+        _reopenPending = false;
     }
 
     /// <summary>Whether the overflow closing can still close the panel, so its hide event is worth hooking.</summary>
@@ -46,6 +55,7 @@ public sealed class PanelDismissal
     public void Clicked(uint pid)
     {
         _clickedPid = pid;
+        _reopenArmed = true;
         _menuDepth = 0;
         _lastMenuClickOutside = false;
     }
@@ -74,6 +84,7 @@ public sealed class PanelDismissal
         // The app's menu sits above the panel, so a click on it is a menu click even where the two overlap.
         var onMenu = at.OnMenu || (at.OnForeground && IsAppPopup(fg));
         var insideTray = at.OnTray && !onMenu;
+        if (insideTray) _reopenArmed = true;
         if (_menuDepth > 0)
         {
             _lastMenuClickOutside = !insideTray;
@@ -97,14 +108,40 @@ public sealed class PanelDismissal
     }
 
     /// <summary>The overflow the panel opened with has gone, checked a moment after it hid.</summary>
-    /// <returns>True when the panel should close.</returns>
-    public bool OverflowClosed(bool pointerOverPanel, ForegroundInfo fg)
+    /// <remarks>
+    /// With the pointer over the panel the overflow was most likely closed by the clicked app taking the
+    /// foreground, which leaves the panel floating alone, so it is reopened. <see cref="Reopened"/> or
+    /// <see cref="ReopenFailed"/> must follow a <see cref="OverflowOutcome.Reopen"/>.
+    /// </remarks>
+    public OverflowOutcome OverflowClosed(bool pointerOverPanel, ForegroundInfo fg)
     {
-        if (!_overflowAtOpen) return false;
+        if (!_overflowAtOpen || _reopenPending) return OverflowOutcome.Keep;
+        if (pointerOverPanel && _menuDepth == 0 && !IsAppPopup(fg))
+        {
+            if (!_reopenArmed)
+            {
+                _overflowAtOpen = false;
+                return OverflowOutcome.Close;
+            }
+            _reopenArmed = false;
+            _reopenPending = true;
+            return OverflowOutcome.Reopen;
+        }
         _overflowAtOpen = false;
-        if (pointerOverPanel) return false;
+        if (pointerOverPanel) return OverflowOutcome.Keep;
         // The clicked app taking the foreground for its menu is what closed it.
-        return _menuDepth == 0 && !IsAppPopup(fg) && !(IsClickedApp(fg.Pid) && !fg.Visible);
+        return _menuDepth == 0 && !IsAppPopup(fg) && !(IsClickedApp(fg.Pid) && !fg.Visible) ? OverflowOutcome.Close : OverflowOutcome.Keep;
+    }
+
+    /// <summary>The overflow is showing again; it is watched as before.</summary>
+    public void Reopened() => _reopenPending = false;
+
+    /// <returns>True when the panel should close.</returns>
+    public bool ReopenFailed()
+    {
+        _reopenPending = false;
+        _overflowAtOpen = false;
+        return true;
     }
 
     bool IsClickedApp(uint pid) => pid != 0 && pid == _clickedPid;

@@ -15,7 +15,6 @@ namespace CleanTray.UI;
 public partial class PanelWindow : Window
 {
     const int GapDip = 8;
-    const string OverflowClass = "TopLevelWindowForOverflowXamlIsland";
     // Long enough for an overflow closed by our own click to be told apart from one the user left.
     static readonly TimeSpan OverflowSettle = TimeSpan.FromMilliseconds(150);
 
@@ -36,6 +35,7 @@ public partial class PanelWindow : Window
     Dictionary<ulong, Button> _buttons = new();
     IntPtr _hwnd;
     IntPtr _overflow;
+    Win32.RECT _overflowRect;
     IntPtr _winEventHook;
     IntPtr _overflowHook;
     IntPtr _mouseHook;
@@ -328,7 +328,8 @@ public partial class PanelWindow : Window
 
     void FindTray()
     {
-        _overflow = Win32.FindWindowW(OverflowClass, null);
+        _overflow = Win32.FindWindowW(OverflowOpener.WindowClass, null);
+        IsShown(_overflow, out _overflowRect);
         var main = Win32.FindWindowW("Shell_TrayWnd", null);
         if (main != IntPtr.Zero) _taskbars.Add(main);
         for (var w = IntPtr.Zero; (w = Win32.FindWindowExW(IntPtr.Zero, w, "Shell_SecondaryTrayWnd", null)) != IntPtr.Zero;)
@@ -385,10 +386,49 @@ public partial class PanelWindow : Window
             if (_closing || Win32.IsWindowVisible(_overflow)) return;
             Win32.GetCursorPos(out var pt);
             var fg = CurrentForeground();
-            if (_dismissal.OverflowClosed(IsShown(_hwnd, out var self) && Contains(self, pt.X, pt.Y), fg))
-                CloseSoon("overflow closed", fg);
+            switch (_dismissal.OverflowClosed(IsShown(_hwnd, out var self) && Contains(self, pt.X, pt.Y), fg))
+            {
+                case OverflowOutcome.Close:
+                    CloseSoon("overflow closed", fg);
+                    break;
+                case OverflowOutcome.Reopen:
+                    ReopenOverflow();
+                    break;
+            }
         };
         return timer;
+    }
+
+    // Opening the app's menu can take the foreground and close the overflow, which would leave the
+    // panel floating alone. Bring the overflow back, or close with it if that does not work.
+    async void ReopenOverflow()
+    {
+        Log.Write("panel: overflow closed with the pointer over the panel, reopening it");
+        OverflowOpener.Result result;
+        try
+        {
+            result = await OverflowOpener.ReopenAsync(_taskbars.ToArray(), _overflowRect);
+        }
+        catch (Exception ex)
+        {
+            result = new(IntPtr.Zero, LogText.Error(ex));
+        }
+        if (_closing) return;
+        if (result.Window == IntPtr.Zero)
+        {
+            Log.Write($"panel: reopening the overflow failed: {result.Detail}");
+            if (_dismissal.ReopenFailed()) CloseSoon($"overflow closed (reopen failed: {result.Detail})", CurrentForeground());
+            return;
+        }
+        _overflow = result.Window;
+        IsShown(_overflow, out _overflowRect);
+        _dismissal.Reopened();
+        Log.Write($"panel: overflow reopened ({result.Detail})");
+        Reposition();
+        // The overflow can light-dismiss itself again before its hide event is watched for: check once more.
+        _overflowCheck ??= NewOverflowCheck();
+        _overflowCheck.Stop();
+        _overflowCheck.Start();
     }
 
     // Runs for every mouse event system-wide while the panel is open, so it only reads window state
