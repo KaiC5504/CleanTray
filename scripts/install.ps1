@@ -54,14 +54,18 @@ Set-Content (Join-Path $InstallDir 'installed.marker') "Installed by scripts/ins
 
 $installed = Join-Path $InstallDir 'CleanTray.exe'
 
-# Save() overwrites, so installing again just refreshes the shortcut.
-$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut(
-    (Join-Path ([Environment]::GetFolderPath('Programs')) 'CleanTray.lnk'))
-$shortcut.TargetPath = $installed
-$shortcut.WorkingDirectory = $InstallDir
-$shortcut.IconLocation = "$installed,0"
-$shortcut.Description = 'CleanTray'
-$shortcut.Save()
+# Save() overwrites, so installing again just refreshes the shortcut. Not worth leaving the app stopped over.
+try {
+    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut(
+        (Join-Path ([Environment]::GetFolderPath('Programs')) 'CleanTray.lnk'))
+    $shortcut.TargetPath = $installed
+    $shortcut.WorkingDirectory = $InstallDir
+    $shortcut.IconLocation = "$installed,0"
+    $shortcut.Description = 'CleanTray'
+    $shortcut.Save()
+} catch {
+    Write-Warning "Could not create the Start menu shortcut: $($_.Exception.Message)"
+}
 
 $exit = Wait-Exit (Start-Process $installed -ArgumentList '--register-autostart' -PassThru) 30 'CleanTray --register-autostart'
 if ($exit) { Write-Warning "CleanTray --register-autostart exited $exit" }

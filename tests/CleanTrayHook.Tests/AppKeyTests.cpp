@@ -9,8 +9,8 @@
 using namespace ct;
 
 TEST(AppKey_StripsVersionedAppFolder) {
-    CHECK_EQ(NormalizeAppKey(L"C:\\Users\\k\\AppData\\Local\\Discord\\app-1.0.9175\\Discord.exe", L""),
-             std::wstring(L"c:\\users\\k\\appdata\\local\\discord\\discord.exe"));
+    CHECK_EQ(NormalizeAppKey(L"C:\\Users\\User\\AppData\\Local\\Discord\\app-1.0.9175\\Discord.exe", L""),
+             std::wstring(L"c:\\users\\user\\appdata\\local\\discord\\discord.exe"));
 }
 
 TEST(AppKey_RewritesMsixPackageFolder) {

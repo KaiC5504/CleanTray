@@ -49,7 +49,7 @@ public sealed class AppSearchTests
 
     [Fact]
     public void Matches_NonAsciiNames() =>
-        Assert.True(AppSearch.Matches("网易云音乐", @"C:\Apps\cloudmusic.exe", "云音"));
+        Assert.True(AppSearch.Matches("示例同步", @"C:\Apps\sync.exe", "例同"));
 
     [Theory]
     [InlineData(false, null, 5, false)]
