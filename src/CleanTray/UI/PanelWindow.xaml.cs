@@ -22,8 +22,11 @@ public partial class PanelWindow : Window
     readonly IconRegistry _registry;
     readonly Action<byte[]> _send;
     readonly Func<Rect> _anchor;
+    readonly Func<IReadOnlyList<string>> _savedOrder;
+    readonly Action<IReadOnlyList<string>> _commitOrder;
     readonly Func<Rect>? _placeAt;
     readonly PanelDismissal _dismissal = new();
+    readonly PanelDrag _drag;
     // Win32 menus of the clicked app, by popup window: its pid can't be looked up once the menu is gone.
     readonly Dictionary<IntPtr, uint> _menus = new();
     // Kept in fields: the hooks call back through them for as long as they are installed.
@@ -42,20 +45,28 @@ public partial class PanelWindow : Window
     bool _closing;
 
     /// <param name="anchor">The master icon's rect, handed back to the DLL when the panel closes.</param>
+    /// <param name="savedOrder">The saved icon order, read afresh each time since the settings can be replaced.</param>
+    /// <param name="commitOrder">Saves the order the user dropped the icons in.</param>
     /// <param name="placeAt">Where to open instead of at <paramref name="anchor"/>, such as the cursor.</param>
-    internal PanelWindow(IconRegistry registry, Action<byte[]> send, Func<Rect> anchor, Func<Rect>? placeAt = null)
+    internal PanelWindow(IconRegistry registry, Action<byte[]> send, Func<Rect> anchor,
+        Func<IReadOnlyList<string>> savedOrder, Action<IReadOnlyList<string>> commitOrder, Func<Rect>? placeAt = null)
     {
         InitializeComponent();
         _registry = registry;
         _send = send;
         _anchor = anchor;
+        _savedOrder = savedOrder;
+        _commitOrder = commitOrder;
         _placeAt = placeAt;
         _onWinEvent = OnWinEvent;
         _onMouse = OnMouse;
         _dark = SystemUsesDarkTheme();
         if (_dark) ApplyDarkTheme();
 
-        _registry.Changed += Rebuild;
+        _drag = new PanelDrag(Items, this);
+        _drag.Lifted += b => b.Style = (Style)FindResource("IconButtonLifted");
+        _drag.Ended += OnDragEnded;
+        _registry.Changed += OnRegistryChanged;
         Rebuild();
         SourceInitialized += (_, _) =>
         {
@@ -92,16 +103,49 @@ public partial class PanelWindow : Window
     void OnClosed(object? sender, EventArgs e)
     {
         RemoveHooks();
-        _registry.Changed -= Rebuild;
+        _drag.Dispose();
+        _registry.Changed -= OnRegistryChanged;
         var r = _anchor();
         _send(CommandWriter.SetAnchor((int)r.Left, (int)r.Top, (int)r.Right, (int)r.Bottom));
+    }
+
+    // A drag leaves the panel alone until it ends, then rebuilds once. An icon that goes away under
+    // the pointer ends it at once.
+    void OnRegistryChanged()
+    {
+        if (_drag.Dragged is not { } dragged)
+        {
+            Rebuild();
+            return;
+        }
+        var id = ((TrayIconInfo)dragged.Tag).Id;
+        if (!_registry.PanelIcons.Any(i => i.Id == id)) _drag.Cancel();
+    }
+
+    void OnDragEnded(Button b, bool dropped)
+    {
+        b.Style = (Style)FindResource("IconButton");
+        if (_closing) return;
+        if (dropped) SaveOrder();
+        Rebuild();
+    }
+
+    void SaveOrder()
+    {
+        var shown = Items.Children.Cast<Button>().Select(b => ((TrayIconInfo)b.Tag).Key).ToList();
+        var saved = _savedOrder();
+        var next = PanelOrder.Commit(saved, shown);
+        // Two icons with one key can swap places without the saved order changing.
+        if (next.SequenceEqual(saved)) return;
+        _commitOrder(next);
+        Log.Write($"panel: reordered {shown.Count} icons");
     }
 
     // Registry changes fire for every icon in the tray, so buttons are kept and updated in place:
     // recreating them would drop hover and any UI Automation reference to them.
     void Rebuild()
     {
-        var icons = _registry.PanelIcons;
+        var icons = PanelOrder.Arrange(_registry.PanelIcons, _savedOrder());
         var next = new Dictionary<ulong, Button>();
         foreach (var icon in icons)
         {
@@ -168,7 +212,9 @@ public partial class PanelWindow : Window
         SetText(b, icon);
         b.PreviewMouseLeftButtonDown += (_, e) =>
         {
-            if (e.ClickCount == 1) _suppressClick = false;
+            if (e.ClickCount != 1) return;
+            _suppressClick = false;
+            _drag.Press(b, e);
         };
         b.Click += (_, _) =>
         {

@@ -75,6 +75,7 @@ public static class SettingsStore
     {
         if (string.IsNullOrEmpty(s.Hotkey)) s.Hotkey = new AppSettings().Hotkey;
         s.Apps = (s.Apps ?? new()).Where(a => a is not null && !string.IsNullOrEmpty(a.Key)).ToList();
+        s.PanelOrder = (s.PanelOrder ?? new()).Where(k => !string.IsNullOrEmpty(k)).Distinct(StringComparer.Ordinal).ToList();
         foreach (var app in s.Apps)
         {
             app.DisplayName ??= "";

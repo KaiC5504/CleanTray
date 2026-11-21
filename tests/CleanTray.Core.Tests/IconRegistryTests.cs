@@ -20,13 +20,26 @@ public class IconRegistryTests
     }
 
     [Fact]
-    public void IconRegistry_PanelOrdersByExePathThenId()
+    public void IconRegistry_PanelIconsComeInArrivalOrder()
     {
         var r = new IconRegistry();
         r.Apply(Icon(5, "C:\\b.exe"));
         r.Apply(Icon(9, "C:\\a.exe"));
         r.Apply(Icon(2, "C:\\a.exe"));
-        Assert.Equal(new ulong[] { 2, 9, 5 }, r.PanelIcons.Select(i => i.Id).ToArray());
+        Assert.Equal(new ulong[] { 2, 5, 9 }, r.PanelIcons.Select(i => i.Id).ToArray());
+    }
+
+    [Fact]
+    public void IconRegistry_PanelIconKeyIsTheRuleKey()
+    {
+        var guid = new Guid("3B3905D1-AFD0-CA7E-3CA2-C9DA5791FD04");
+        var r = new IconRegistry();
+        r.Apply(Icon(1, "C:\\A.exe"));
+        r.Apply(Icon(2, "C:\\A.exe") with { HasGuid = true, Guid = guid });
+
+        Assert.Equal(
+            new[] { "c:\\a.exe#uid:1", "c:\\a.exe#{3b3905d1-afd0-ca7e-3ca2-c9da5791fd04}" },
+            r.PanelIcons.Select(i => i.Key).ToArray());
     }
 
     [Fact]

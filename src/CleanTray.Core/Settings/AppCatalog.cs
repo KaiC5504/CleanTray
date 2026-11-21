@@ -23,7 +23,7 @@ public static class AppCatalog
         }
         app.LastSeenUtc = nowUtc;
 
-        var part = IconPart(e);
+        var part = IconKey.Part(e);
         var icon = app.Icons.FirstOrDefault(i => i.IconPart == part);
         if (icon is null)
         {
@@ -34,8 +34,4 @@ public static class AppCatalog
         icon.Tip = e.Tip;
         return added;
     }
-
-    // Must match the DLL's IconPart, since icon rules are keyed by appKey#iconPart.
-    static string IconPart(IconUpsertEvent e) =>
-        e.HasGuid ? e.Guid.ToString("B").ToLowerInvariant() : "uid:" + e.Uid;
 }

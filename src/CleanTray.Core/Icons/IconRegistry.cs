@@ -13,8 +13,7 @@ public class IconRegistry
     public IReadOnlyList<TrayIconInfo> PanelIcons =>
         _icons.Values
             .Where(i => i.Captured && !i.Hidden)
-            .OrderBy(i => i.ExePath, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(i => i.Id)
+            .OrderBy(i => i.Id)
             .ToList();
 
     public void Apply(HookEvent e)
@@ -22,7 +21,7 @@ public class IconRegistry
         switch (e)
         {
             case IconUpsertEvent u:
-                _icons[u.IconId] = new TrayIconInfo(u.IconId, u.Pid, u.AppKey, u.ExePath, u.Tip,
+                _icons[u.IconId] = new TrayIconInfo(u.IconId, u.Pid, u.AppKey, IconKey.Part(u), u.ExePath, u.Tip,
                     u.Captured, (u.State & NisHidden) != 0, u.Width, u.Height, u.Bgra);
                 Changed?.Invoke();
                 break;

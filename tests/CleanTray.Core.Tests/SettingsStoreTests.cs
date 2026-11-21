@@ -143,6 +143,39 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void SettingsStore_PanelOrderRoundTrips()
+    {
+        var s = new AppSettings { PanelOrder = { "c:\\a.exe#uid:2", "c:\\b.exe#{3b3905d1-afd0-ca7e-3ca2-c9da5791fd04}" } };
+
+        SettingsStore.Save(SettingsPath, s);
+
+        Assert.Equal(s.PanelOrder, SettingsStore.Load(SettingsPath).PanelOrder);
+    }
+
+    [Fact]
+    public void SettingsStore_FileWithoutPanelOrderLoadsEmpty()
+    {
+        File.WriteAllText(SettingsPath, """
+            { "Version": 1, "Hotkey": "Ctrl+1", "Apps": [ { "Key": "a.exe" } ] }
+            """);
+        var r = SettingsStore.LoadWithStatus(SettingsPath);
+
+        Assert.Equal(SettingsLoadStatus.Loaded, r.Status);
+        Assert.Equal("Ctrl+1", r.Settings.Hotkey);
+        Assert.Empty(r.Settings.PanelOrder);
+    }
+
+    [Fact]
+    public void SettingsStore_PanelOrderNormalized()
+    {
+        File.WriteAllText(SettingsPath, """{ "PanelOrder": null }""");
+        Assert.Empty(SettingsStore.Load(SettingsPath).PanelOrder);
+
+        File.WriteAllText(SettingsPath, """{ "PanelOrder": [ "a#uid:1", null, "", "b#uid:1", "a#uid:1" ] }""");
+        Assert.Equal(new[] { "a#uid:1", "b#uid:1" }, SettingsStore.Load(SettingsPath).PanelOrder);
+    }
+
+    [Fact]
     public void SettingsStore_LoadWithStatusReportsEachOutcome()
     {
         Assert.Equal(SettingsLoadStatus.Missing, SettingsStore.LoadWithStatus(SettingsPath).Status);

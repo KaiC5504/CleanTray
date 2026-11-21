@@ -14,6 +14,7 @@ public class AppSettings
     public bool CaptureNewByDefault { get; set; }
     public bool StartWithWindows { get; set; } = true;
     public List<AppRule> Apps { get; set; } = new();
+    public List<string> PanelOrder { get; set; } = new();
 }
 
 public class AppRule

@@ -32,7 +32,7 @@ public static class RulesTableWriter
             {
                 if (icon.Mode is null && icon.Popups is null) continue;
                 Add(new Entry(
-                    appKey + "#" + icon.IconPart.ToLowerInvariant(),
+                    IconKey.Of(app.Key, icon.IconPart),
                     icon.Mode ?? app.Mode,
                     icon.Popups ?? app.Popups));
             }

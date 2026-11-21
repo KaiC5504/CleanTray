@@ -257,13 +257,19 @@ public partial class App : Application
             var here = new Rect(pt.X, pt.Y, 1, 1);
             placeAt = () => here;
         }
-        _panel = new PanelWindow(_registry, Send, _master.GetScreenRect, placeAt);
+        _panel = new PanelWindow(_registry, Send, _master.GetScreenRect, () => _settings.PanelOrder, CommitPanelOrder, placeAt);
         _panel.Closed += (_, _) =>
         {
             _panel = null;
             _panelClosedAt = Environment.TickCount64;
         };
         _panel.Show();
+    }
+
+    void CommitPanelOrder(IReadOnlyList<string> order)
+    {
+        _settings.PanelOrder = order.ToList();
+        CommitNow();
     }
 
     void OpenSettings()
