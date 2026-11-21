@@ -2,11 +2,11 @@ namespace CleanTray.Core;
 
 public static class AppCatalog
 {
-    /// <summary>Records a sighting; returns true when a new app or icon rule was added. CleanTray's own icon is never recorded.</summary>
+    /// <summary>Records a sighting; returns true when a new app or icon rule was added. No copy of CleanTray is recorded.</summary>
     public static bool RecordSeen(AppSettings s, IconUpsertEvent e, DateTime nowUtc, Func<string, string> displayNameFor,
         string? ownKey = null)
     {
-        if (e.AppKey == ownKey) return false;
+        if (AppList.IsCleanTray(e.AppKey, ownKey)) return false;
         var added = false;
         var app = s.Apps.FirstOrDefault(a => a.Key == e.AppKey);
         if (app is null)

@@ -2,7 +2,7 @@ namespace CleanTray.Core.Tests;
 
 public sealed class AppListTests
 {
-    const string Own = @"d:\tools\cleantray\cleantray.exe";
+    const string Own = @"c:\apps\cleantray\cleantray.exe";
 
     static AppRule Rule(string key, string name, RuleMode mode = RuleMode.Show) =>
         new() { Key = key, DisplayName = name, ExePath = key, Mode = mode };
@@ -57,6 +57,68 @@ public sealed class AppListTests
     }
 
     [Fact]
+    public void Build_HidesCleanTrayByFileNameWhenItsOwnKeyIsUnknown()
+    {
+        const string dev = @"c:\src\cleantray\bin\cleantray.exe";
+        var s = new AppSettings { Apps = [Rule(dev, "CleanTray"), Rule("a", "A")] };
+        var list = AppList.Build(s, [Known(Own, "CleanTray"), Known("b", "B")], null);
+
+        Assert.Equal(["a", "b"], list.Select(e => e.Rule.Key));
+        var empty = new AppSettings();
+        AppList.Adopt(empty, Rule(dev, "CleanTray"), null);
+        Assert.Empty(empty.Apps);
+    }
+
+    [Fact]
+    public void Build_NeverListsWindowsExplorer()
+    {
+        const string explorer = @"c:\windows\explorer.exe";
+        var s = new AppSettings { Apps = [Rule(explorer, "Windows Explorer"), Rule("a", "A")] };
+        var list = AppList.Build(s, [Known(explorer, "Windows Explorer"), Known(@"d:\x\Explorer.EXE", "Other"), Known("b", "B")], Own);
+
+        Assert.Equal(["a", "b"], list.Select(e => e.Rule.Key));
+    }
+
+    [Fact]
+    public void Build_ExplorerLookalikesStayListed()
+    {
+        var s = new AppSettings { Apps = [Rule(@"c:\x\explorer++.exe", "Explorer++"), Rule(@"c:\x\myexplorer.exe", "My")] };
+        Assert.Equal(2, AppList.Build(s, [], Own).Count);
+    }
+
+    [Fact]
+    public void Adopt_RefusesWindowsExplorer()
+    {
+        var s = new AppSettings();
+        var draft = Rule(@"c:\windows\explorer.exe", "Windows Explorer");
+        Assert.Same(draft, AppList.Adopt(s, draft, Own));
+        Assert.Empty(s.Apps);
+    }
+
+    [Theory]
+    [InlineData(@"c:\apps\cleantray\cleantray.exe", @"c:\apps\cleantray\cleantray.exe", true)]
+    [InlineData(@"c:\dev\CleanTray.EXE", @"c:\apps\cleantray\cleantray.exe", true)]
+    [InlineData(@"c:\dev\cleantray.exe", null, true)]
+    [InlineData(@"c:\dev\notcleantray.exe", null, false)]
+    [InlineData(@"c:\dev\cleantray.exe.bak", @"c:\apps\cleantray\cleantray.exe", false)]
+    [InlineData(@"c:\dev\renamed.exe", @"c:\dev\renamed.exe", true)]
+    [InlineData(@"c:\other\renamed.exe", @"c:\dev\renamed.exe", true)]
+    [InlineData(@"c:\dev\other.exe", @"c:\dev\renamed.exe", false)]
+    public void IsCleanTray_ByKeyOrFileName(string key, string? ownKey, bool expected)
+    {
+        Assert.Equal(expected, AppList.IsCleanTray(key, ownKey));
+        Assert.Equal(expected, AppList.IsExcluded(key, ownKey));
+    }
+
+    [Theory]
+    [InlineData(@"c:\windows\explorer.exe", true)]
+    [InlineData(@"C:\WINDOWS\Explorer.EXE", true)]
+    [InlineData(@"c:\windows\explorer.exe.mui", false)]
+    [InlineData(@"c:\x\explorer++.exe", false)]
+    public void IsExcluded_CoversWindowsExplorer(string key, bool expected) =>
+        Assert.Equal(expected, AppList.IsExcluded(key, Own));
+
+    [Fact]
     public void Build_KnownAppsBecomeShowDraftsOutsideTheSettings()
     {
         var s = new AppSettings { CaptureNewByDefault = true };
@@ -75,6 +137,20 @@ public sealed class AppListTests
     {
         var s = new AppSettings { Apps = [new AppRule { Key = "b", ExePath = @"C:\x\Beta.exe" }, Rule("a", "Alpha")] };
         Assert.Equal(["a", "b"], AppList.Build(s, [], Own).Select(e => e.Rule.Key));
+    }
+
+    [Fact]
+    public void Build_OrdersByTheSameComparisonTheRowsUseWhenInserted()
+    {
+        var s = new AppSettings { Apps = [Rule("s2", "beta"), Rule("s1", "Alpha"), Rule("s3", "ALPHA")] };
+        var list = AppList.Build(s, [Known("k2", "zeta"), Known("k1", "Delta"), Known("k3", "DELTA")], Own);
+
+        for (var i = 1; i < list.Count; i++)
+        {
+            var (a, b) = (list[i - 1], list[i]);
+            Assert.True(AppList.Compare(a.Group, AppList.Name(a.Rule), b.Group, AppList.Name(b.Rule)) <= 0);
+        }
+        Assert.Equal(["s1", "s3", "s2", "k1", "k3", "k2"], list.Select(e => e.Rule.Key));
     }
 
     [Fact]

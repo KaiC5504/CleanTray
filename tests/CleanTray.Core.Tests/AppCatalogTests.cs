@@ -4,9 +4,10 @@ public class AppCatalogTests
 {
     static readonly DateTime Now = new(2026, 11, 21, 0, 0, 0, DateTimeKind.Utc);
 
-    static IconUpsertEvent Event(uint uid = 7, bool hasGuid = false, Guid guid = default, string tip = "Tip") =>
+    static IconUpsertEvent Event(uint uid = 7, bool hasGuid = false, Guid guid = default, string tip = "Tip",
+        string appKey = "c:\\a\\b.exe") =>
         new(1, 1000, 0x1234, uid, hasGuid, guid, 0x8001, 4, 0, true,
-            "c:\\a\\b.exe", "C:\\A\\b.exe", tip, 0, 0, Array.Empty<byte>());
+            appKey, "C:\\A\\b.exe", tip, 0, 0, Array.Empty<byte>());
 
     [Theory]
     [InlineData(true, RuleMode.Captured)]
@@ -75,5 +76,23 @@ public class AppCatalogTests
         var s = new AppSettings { CaptureNewByDefault = true };
         Assert.False(AppCatalog.RecordSeen(s, Event(), Now, _ => "CleanTray", ownKey: "c:\\a\\b.exe"));
         Assert.Empty(s.Apps);
+    }
+
+    [Theory]
+    [InlineData(@"c:\src\bin\cleantray.exe", @"c:\apps\cleantray\cleantray.exe")]
+    [InlineData(@"c:\src\bin\cleantray.exe", null)]
+    public void AppCatalog_NeverRecordsAnotherCopyOfCleanTray(string key, string? ownKey)
+    {
+        var s = new AppSettings { CaptureNewByDefault = true };
+        Assert.False(AppCatalog.RecordSeen(s, Event(appKey: key), Now, _ => "CleanTray", ownKey));
+        Assert.Empty(s.Apps);
+    }
+
+    [Fact]
+    public void AppCatalog_RecordsOtherAppsWhenCleanTraysKeyIsKnown()
+    {
+        var s = new AppSettings();
+        Assert.True(AppCatalog.RecordSeen(s, Event(appKey: @"c:\x\other.exe"), Now, _ => "Other", @"c:\apps\cleantray\cleantray.exe"));
+        Assert.Single(s.Apps);
     }
 }
