@@ -9,7 +9,7 @@ namespace CleanTray.Tray;
 /// <summary>CleanTray's own notification icon and its menu.</summary>
 sealed class MasterIcon : IDisposable
 {
-    const uint Uid = 1;
+    public const uint Uid = 1;
     const uint CallbackMsg = Win32.WM_APP + 1;
     const uint CmdSettings = 1, CmdPause = 2, CmdExit = 3;
 

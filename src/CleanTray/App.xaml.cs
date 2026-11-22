@@ -34,6 +34,7 @@ public partial class App : Application
     Debouncer? _saveSoon;
     RulesPublisher? _rules;
     MasterIcon? _master;
+    OverflowOrderKeeper? _overflowOrder;
     HotkeyService? _hotkey;
     PopupToasts? _toasts;
     HookHost? _host;
@@ -149,6 +150,7 @@ public partial class App : Application
         _master.ExitClicked += () => ExitApp();
         _master.SessionEnding += OnSessionEnding;
         _master.SetVisible(_settings.ShowMasterIcon);
+        if (Environment.ProcessPath is { } exe) _overflowOrder = new OverflowOrderKeeper(exe);
 
         _hotkey = new HotkeyService(_master);
         _hotkey.Pressed += () => Dispatcher.BeginInvoke(OpenPanelAtCursor);
@@ -382,6 +384,11 @@ public partial class App : Application
         {
             _hotkey?.Dispose();
             _hotkey = null;
+        });
+        Guard("overflow order", () =>
+        {
+            _overflowOrder?.Dispose();
+            _overflowOrder = null;
         });
         Guard("master icon", () =>
         {

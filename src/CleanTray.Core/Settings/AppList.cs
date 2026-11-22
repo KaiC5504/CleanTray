@@ -17,8 +17,6 @@ public sealed record AppListEntry(AppListGroup Group, AppRule Rule, byte[]? Icon
 public static class AppList
 {
     const string CleanTrayExe = "CleanTray.exe";
-    // The hook skips Explorer's own icons, so a rule for it would silently do nothing.
-    const string ExplorerExe = "explorer.exe";
 
     static readonly Comparer<AppListEntry> EntryOrder =
         Comparer<AppListEntry>.Create((a, b) => Compare(a.Group, Name(a.Rule), b.Group, Name(b.Rule)));
@@ -30,10 +28,10 @@ public static class AppList
         var seenKeys = s.Apps.Select(a => a.Key).ToHashSet();
 
         var seen = s.Apps
-            .Where(a => !IsExcluded(a.Key, ownKey))
+            .Where(a => !IsCleanTray(a.Key, ownKey))
             .Select(a => new AppListEntry(AppListGroup.Seen, a, png.GetValueOrDefault(a.Key)));
         var knownOnly = known
-            .Where(k => !IsExcluded(k.Key, ownKey) && seenKeys.Add(k.Key))
+            .Where(k => !IsCleanTray(k.Key, ownKey) && seenKeys.Add(k.Key))
             .Select(k => new AppListEntry(AppListGroup.KnownOnly, Draft(k), k.IconPng));
 
         return seen.Concat(knownOnly).OrderBy(e => e, EntryOrder).ToList();
@@ -49,11 +47,11 @@ public static class AppList
 
     /// <summary>
     /// The rule a change to a known app's draft must land on: the settings' own rule if the app was
-    /// seen meanwhile, else the draft, now added. An excluded app never gets a rule.
+    /// seen meanwhile, else the draft, now added. CleanTray itself never gets a rule.
     /// </summary>
     public static AppRule Adopt(AppSettings s, AppRule draft, string? ownKey)
     {
-        if (IsExcluded(draft.Key, ownKey)) return draft;
+        if (IsCleanTray(draft.Key, ownKey)) return draft;
         var existing = s.Apps.FirstOrDefault(a => a.Key == draft.Key);
         if (existing is not null) return existing;
         s.Apps.Add(draft);
@@ -72,10 +70,6 @@ public static class AppList
         return file.Equals(CleanTrayExe, StringComparison.OrdinalIgnoreCase)
             || (ownKey is not null && file.Equals(Path.GetFileName(ownKey), StringComparison.OrdinalIgnoreCase));
     }
-
-    /// <summary>Apps that never get a row or a rule: CleanTray and Windows Explorer.</summary>
-    public static bool IsExcluded(string key, string? ownKey) =>
-        IsCleanTray(key, ownKey) || Path.GetFileName(key).Equals(ExplorerExe, StringComparison.OrdinalIgnoreCase);
 
     static AppRule Draft(KnownApp app) => new()
     {

@@ -112,7 +112,7 @@ public partial class SettingsWindow : Window
         var running = _host.Registry.All.ToLookup(i => i.AppKey);
         foreach (var rule in _host.Settings.Apps)
         {
-            if (AppList.IsExcluded(rule.Key, _host.OwnKey)) continue;
+            if (AppList.IsCleanTray(rule.Key, _host.OwnKey)) continue;
             if (_byKey.TryGetValue(rule.Key, out var row)) row.Bind(rule);
             else Add(new AppListEntry(AppListGroup.Seen, rule, _snapshots.GetValueOrDefault(rule.Key)));
         }

@@ -55,6 +55,14 @@ BOOL CALLBACK CollectWindow(HWND hwnd, LPARAM param) {
     }
 }
 
+// Explorer's own tray icons (USB eject, Bluetooth, ...) come from these windows. Its other
+// windows, the taskbar and desktop among them, must never be sent TaskbarCreated.
+bool IsExplorerIconWindow(HWND hwnd) {
+    wchar_t cls[64];
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) <= 0) return false;
+    return wcscmp(cls, L"SystemTray_Main") == 0 || wcscmp(cls, L"BluetoothNotificationAreaIconWindowClass") == 0;
+}
+
 }  // namespace
 
 void EventQueue::Popup(uint64_t id, DWORD infoFlags, const std::wstring& title, const std::wstring& text) {
@@ -311,7 +319,7 @@ void PipeWorker::Kick() {
         if (Stopping()) return;
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
-        if (!pid || pid == self || pid == serverPid_) continue;
+        if (!pid || pid == serverPid_ || (pid == self && !IsExplorerIconWindow(hwnd))) continue;
         auto [it, fresh] = decided.try_emplace(pid, false);
         if (fresh && !interceptor_.HasIconsForPid(pid)) {
             auto app = host_.IdentifyPid(pid);

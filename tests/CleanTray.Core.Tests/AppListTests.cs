@@ -70,29 +70,22 @@ public sealed class AppListTests
     }
 
     [Fact]
-    public void Build_NeverListsWindowsExplorer()
+    public void Build_ListsWindowsExplorer()
     {
         const string explorer = @"c:\windows\explorer.exe";
         var s = new AppSettings { Apps = [Rule(explorer, "Windows Explorer"), Rule("a", "A")] };
-        var list = AppList.Build(s, [Known(explorer, "Windows Explorer"), Known(@"d:\x\Explorer.EXE", "Other"), Known("b", "B")], Own);
+        var list = AppList.Build(s, [Known(explorer, "Windows Explorer"), Known("b", "B")], Own);
 
-        Assert.Equal(["a", "b"], list.Select(e => e.Rule.Key));
+        Assert.Equal(["a", explorer, "b"], list.Select(e => e.Rule.Key));
     }
 
     [Fact]
-    public void Build_ExplorerLookalikesStayListed()
-    {
-        var s = new AppSettings { Apps = [Rule(@"c:\x\explorer++.exe", "Explorer++"), Rule(@"c:\x\myexplorer.exe", "My")] };
-        Assert.Equal(2, AppList.Build(s, [], Own).Count);
-    }
-
-    [Fact]
-    public void Adopt_RefusesWindowsExplorer()
+    public void Adopt_AcceptsWindowsExplorer()
     {
         var s = new AppSettings();
         var draft = Rule(@"c:\windows\explorer.exe", "Windows Explorer");
         Assert.Same(draft, AppList.Adopt(s, draft, Own));
-        Assert.Empty(s.Apps);
+        Assert.Same(draft, Assert.Single(s.Apps));
     }
 
     [Theory]
@@ -107,16 +100,7 @@ public sealed class AppListTests
     public void IsCleanTray_ByKeyOrFileName(string key, string? ownKey, bool expected)
     {
         Assert.Equal(expected, AppList.IsCleanTray(key, ownKey));
-        Assert.Equal(expected, AppList.IsExcluded(key, ownKey));
     }
-
-    [Theory]
-    [InlineData(@"c:\windows\explorer.exe", true)]
-    [InlineData(@"C:\WINDOWS\Explorer.EXE", true)]
-    [InlineData(@"c:\windows\explorer.exe.mui", false)]
-    [InlineData(@"c:\x\explorer++.exe", false)]
-    public void IsExcluded_CoversWindowsExplorer(string key, bool expected) =>
-        Assert.Equal(expected, AppList.IsExcluded(key, Own));
 
     [Fact]
     public void Build_KnownAppsBecomeShowDraftsOutsideTheSettings()
