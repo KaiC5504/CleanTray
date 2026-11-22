@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using CleanTray.Core;
@@ -97,7 +98,10 @@ public partial class App : Application
             return;
         }
 
-        Log.Write($"start, pid {Environment.ProcessId}");
+        // At logon the runtime can take many seconds to load before this line; the gap is worth seeing.
+        DateTime launched;
+        using (var process = Process.GetCurrentProcess()) launched = process.StartTime;
+        Log.Write($"start, pid {Environment.ProcessId}, launched {launched:HH:mm:ss.fff} ({(DateTime.Now - launched).TotalMilliseconds:F0} ms ago)");
         SessionEnding += (_, _) => OnSessionEnding();
         Listen(OpenPanelEventName, OpenPanel);
         Listen(OpenSettingsEventName, OpenSettings);
@@ -123,6 +127,20 @@ public partial class App : Application
             Log.Write($"rules: cannot open the mapping: {LogText.Error(ex)}");
         }
 
+        // The hook goes in before anything else: until it does, apps starting at logon show in the tray.
+        // Its events are posted to this thread, so they wait for the rest of startup.
+        _host = new HookHost(Dispatcher);
+        _host.EventReceived += OnHookEvent;
+        // Captured apps asking for their icon's rect get this until the panel first opens.
+        _host.Connected += () =>
+        {
+            if (_panel is not null) _panel.SendAnchor();
+            else if (_master is not null) SendAnchor(_master.GetScreenRect());
+        };
+        _host.Disconnected += () => _registry.Clear();
+        _host.StateChanged += OnHostState;
+        _ = _host.StartAsync();
+
         _master = new MasterIcon();
         _master.LeftClick += TogglePanel;
         _master.TaskbarCreated += () => _host?.OnTaskbarCreated();
@@ -136,22 +154,9 @@ public partial class App : Application
         _hotkey.Pressed += () => Dispatcher.BeginInvoke(OpenPanelAtCursor);
         _hotkey.Register(_settings.Hotkey);
 
-        _toasts = new PopupToasts(Send);
-
-        _host = new HookHost(Dispatcher);
-        _host.EventReceived += OnHookEvent;
-        // Captured apps asking for their icon's rect get this until the panel first opens.
-        _host.Connected += () =>
-        {
-            if (_panel is not null) _panel.SendAnchor();
-            else if (_master is not null) SendAnchor(_master.GetScreenRect());
-        };
-        _host.Disconnected += () => _registry.Clear();
-        _host.StateChanged += OnHostState;
-        _ = _host.StartAsync();
-
         _ = ApplyAutostart(force: false);
 
+        Log.Write($"startup: done {(DateTime.Now - launched).TotalMilliseconds:F0} ms after launch");
         if (openPanel) Dispatcher.BeginInvoke(OpenPanel, DispatcherPriority.ApplicationIdle);
         if (openSettings) Dispatcher.BeginInvoke(OpenSettings, DispatcherPriority.ApplicationIdle);
     }
@@ -181,8 +186,9 @@ public partial class App : Application
                 Log.Write($"icon {r.IconId} removed");
                 _registry.Apply(ev);
                 break;
-            case PopupEvent p:
-                _toasts?.Show(p, AppNameFor(p.IconId), _registry.All.FirstOrDefault(i => i.Id == p.IconId)?.Pid ?? 0);
+            case PopupEvent p when !_hookStopped:
+                // Created on first use: the notification libraries take seconds to load at logon.
+                (_toasts ??= new PopupToasts(Send)).Show(p, AppNameFor(p.IconId), _registry.All.FirstOrDefault(i => i.Id == p.IconId)?.Pid ?? 0);
                 break;
         }
     }
