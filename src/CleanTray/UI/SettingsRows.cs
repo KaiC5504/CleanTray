@@ -246,8 +246,10 @@ static class IconImages
     public static ImageSource? From(TrayIconInfo icon)
     {
         if (icon.Width <= 0 || icon.Height <= 0 || icon.Bgra.Length != icon.Width * icon.Height * 4) return null;
+        // Settings is always light.
+        var pixels = IconContrast.ForBackground(icon.Bgra, darkBackground: false);
         // The DLL sends straight (not premultiplied) alpha, which is what Bgra32 means.
-        var source = BitmapSource.Create(icon.Width, icon.Height, 96, 96, PixelFormats.Bgra32, null, icon.Bgra, icon.Width * 4);
+        var source = BitmapSource.Create(icon.Width, icon.Height, 96, 96, PixelFormats.Bgra32, null, pixels, icon.Width * 4);
         source.Freeze();
         return source;
     }

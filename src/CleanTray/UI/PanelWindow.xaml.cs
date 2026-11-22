@@ -205,7 +205,7 @@ public partial class PanelWindow : Window
         BorderBrush = (Brush)FindResource("LabelBorder"),
     };
 
-    static object MakeContent(TrayIconInfo icon)
+    object MakeContent(TrayIconInfo icon)
     {
         var name = DisplayName(icon);
         return MakeImage(icon) ?? (object)new TextBlock
@@ -576,11 +576,12 @@ public partial class PanelWindow : Window
         return tip.Length > 0 ? tip : Path.GetFileNameWithoutExtension(icon.ExePath);
     }
 
-    static Image? MakeImage(TrayIconInfo icon)
+    Image? MakeImage(TrayIconInfo icon)
     {
         if (icon.Width <= 0 || icon.Height <= 0 || icon.Bgra.Length != icon.Width * icon.Height * 4) return null;
+        var pixels = IconContrast.ForBackground(icon.Bgra, _dark);
         // The DLL sends straight (not premultiplied) alpha, which is what Bgra32 means.
-        var source = BitmapSource.Create(icon.Width, icon.Height, 96, 96, PixelFormats.Bgra32, null, icon.Bgra, icon.Width * 4);
+        var source = BitmapSource.Create(icon.Width, icon.Height, 96, 96, PixelFormats.Bgra32, null, pixels, icon.Width * 4);
         source.Freeze();
         var image = new Image { Source = source, Width = 16, Height = 16 };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
